@@ -76,8 +76,8 @@ export const TABLES = {
       },
       {
         "headcode": "G8",
-        "name": "GUNPOWDER",
-        "flavour": "Powder vans. No rough shunting, no sharp stops, no arguments."
+        "name": "THE STONE",
+        "flavour": "Stone for the track gangs. Tipped where the ganger points."
       },
       {
         "headcode": "460",
@@ -86,8 +86,8 @@ export const TABLES = {
       },
       {
         "headcode": "W4",
-        "name": "TIMBER",
-        "flavour": "Long loads, poor brakes. Wants a clear run downhill."
+        "name": "SLEEPERS",
+        "flavour": "New sleepers for the relayers. Long loads, and in no hurry."
       },
       {
         "headcode": "T5",
@@ -96,8 +96,8 @@ export const TABLES = {
       },
       {
         "headcode": "512",
-        "name": "THE SLOW GOODS",
-        "flavour": "Long, slow, forty wagons of nothing urgent. Takes an age."
+        "name": "THE LONG DRAG",
+        "flavour": "Forty wagons of nothing urgent. Takes an age to pass."
       },
       {
         "headcode": "6-J",
@@ -116,8 +116,8 @@ export const TABLES = {
       },
       {
         "headcode": "X9",
-        "name": "BREAKDOWN VAN",
-        "flavour": "Crane and tools for the wreck. Everything else waits."
+        "name": "THE PILOT",
+        "flavour": "Running light to fetch the breakdown vans. Everything else waits."
       },
       {
         "headcode": "2-C",

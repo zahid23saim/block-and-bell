@@ -55,8 +55,11 @@ ok(A.last.phase === "SHIFT", "the shift books on");
 
 const boxes = CL.map(c => c.last.box?.name);
 ok(new Set(boxes).size === N, `${N} distinct boxes on the line: ${boxes.join(", ")}`);
-ok(new RegExp(N + ' on the line').test((A.last.register||[]).map(r=>r.text).join(" ")),
-   "the register records the size of the line");
+// booking on must NAME the boxes: five cold readers thought the rename
+// meant they had been dropped into somebody else's game
+const bookedOn = (A.last.register||[]).map(r=>r.text).join(" ");
+ok(/Booking on/.test(bookedOn) && boxes.every(b => bookedOn.includes(b)),
+   "booking on names every box on the line, so the rename is not a surprise");
 
 // sections: the middle box works two, the ends work one
 const counts = CL.map(c => (c.last.sections || []).length);

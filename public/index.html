@@ -123,6 +123,8 @@ h1{font-family:var(--mono);font-weight:600;letter-spacing:.06em;font-size:30px;m
 .tabs button{flex:1;background:transparent;border:0;border-bottom:2px solid transparent;
   font-family:var(--mono);font-size:12px;letter-spacing:.08em;color:var(--chalk-dim)}
 .tabs button[aria-selected=true]{color:var(--brass);border-bottom-color:var(--brass)}
+.tabsub{color:#5d6068;letter-spacing:0;font-size:10.5px}
+@media (max-width:400px){.tabsub{display:none}}
 .badge{display:inline-block;min-width:16px;padding:0 4px;margin-left:5px;
   background:var(--brass);color:var(--lamp-black);font-size:11px;border-radius:8px}
 .sheet{flex:1;overflow-y:auto;padding:12px 0 8px;min-height:120px}
@@ -219,7 +221,7 @@ h1{font-family:var(--mono);font-weight:600;letter-spacing:.06em;font-size:30px;m
       <h1>BLOCK &amp; BELL</h1>
       <p class="sub">One single track. Two signal boxes. You can only see your own — so say it out loud.</p>
     </div>
-    <p class="fine">Two to four signallers, each on their own device, about six minutes a shift.<br>On your own, you work both boxes. No app, no account, no name required.</p>
+    <p class="fine">Two signal boxes to start; longer lines take up to four. About six minutes a shift.<br>Talk however you like — same room, a phone call, or the message box in the game.<br>On your own, you work both boxes. No app, no account, no name required.</p>
 
     <div id="pick">
       <button class="btn" id="btn-open">OPEN A BOX</button>
@@ -255,7 +257,7 @@ h1{font-family:var(--mono);font-weight:600;letter-spacing:.06em;font-size:30px;m
       <span id="delay" class="mono"></span>
       <button id="help" title="How this works" aria-label="How this works">?</button>
       <button id="mute" title="Bells" aria-label="Mute the bells">◆</button>
-      <span id="wire" class="wire-ok">● wire good</span>
+      <span id="wire" class="wire-ok">● connected</span>
     </div>
 
     <div class="ribbon" id="ribbon" role="status" aria-live="polite" aria-atomic="true"></div>
@@ -275,8 +277,8 @@ h1{font-family:var(--mono);font-weight:600;letter-spacing:.06em;font-size:30px;m
     </div>
 
     <div class="tabs" role="tablist">
-      <button role="tab" aria-selected="true" data-tab="board">BOARD</button>
-      <button role="tab" aria-selected="false" data-tab="book">BOOK<span class="badge hidden" id="book-badge">0</span></button>
+      <button role="tab" aria-selected="true" data-tab="board">BOARD<span class="tabsub"> · tonight's trains</span></button>
+      <button role="tab" aria-selected="false" data-tab="book">BOOK<span class="tabsub"> · your neighbour's orders</span><span class="badge hidden" id="book-badge">0</span></button>
     </div>
 
     <div class="sheet" id="sheet" aria-live="polite"></div>
@@ -531,7 +533,7 @@ function connect(code) {
 }
 function setWire(ok) {
   const w = $("#wire");
-  w.textContent = ok ? "● wire good" : "● wire down";
+  w.textContent = ok ? "● connected" : "● reconnecting…";
   w.className = ok ? "wire-ok" : "wire-bad";
 }
 const act = (action, args) => ws && ws.send(JSON.stringify({ t: "act", action, args }));
@@ -596,8 +598,8 @@ function renderDesks(s) {
   if (desks.length < 2) { host.classList.add("hidden"); note.classList.add("hidden"); return; }
   host.classList.remove("hidden"); note.classList.remove("hidden");
   note.textContent = desks.length > 2
-    ? `You are working ${desks.length} desks. The Notice will record that you did.`
-    : "You are working both boxes. The Notice will record that you worked two desks.";
+    ? `You are working ${desks.length} desks. Your end-of-shift Notice will say so.`
+    : "You are working both boxes. Your end-of-shift Notice will say so.";
   host.textContent = "";
   for (const d of desks) {
     const b = el("button", null, d.name.replace(" BOX", ""));
@@ -862,6 +864,7 @@ function renderRest(s) {
   const rl = $("#roadline"); rl.textContent = "";
   if (s.box && s.roads) {
     const bits = [];
+    bits.push(["ROADS AT YOUR BOX", ""]);
     bits.push(["PLATFORM", s.roads.platform ? "occupied" : "clear"]);
     if (s.box.loops.length) {
       for (const l of s.box.loops) {
@@ -869,9 +872,9 @@ function renderRest(s) {
         bits.push([`LOOP ${l.id} ${l.maxWagons}w`, live && live.occupiedBy ? "occupied" : "clear"]);
       }
     } else bits.push(["LOOP", "none"]);
-    bits.push(["YARD", `${s.roads.yardUsed}/${s.box.yardPrinted}`]);
+    bits.push(["YARD", `${s.roads.yardUsed} of ${s.box.yardPrinted} wagons`]);
     const fac = Object.entries(s.box.facilities).filter(([, v]) => v).map(([k]) => k);
-    bits.push(["", fac.length ? fac.join(" · ") : "no facilities"]);
+    bits.push(["", fac.length ? fac.join(" · ") + " here" : "no water, coal or shed here"]);
     for (const [k, v] of bits) {
       const sp = el("span", null, null);
       if (k) { sp.append(document.createTextNode(k + " ")); sp.append(el("b", null, v)); }
@@ -892,9 +895,10 @@ function renderRest(s) {
     const acts = legal.filter((a) => a.trainId === t.id);
     const b = el("button", "train" + (acts.length ? " actionable" : ""));
     const left = el("div");
-    left.append(el("div", "id", `${t.glyph || ""} ${t.headcode || ""} ${t.name || t.label || ""}`.trim()));
+    left.append(el("div", "id", `${t.headcode || ""} ${t.name || t.label || ""}`.trim()));
     if (t.className) left.append(el("div", "meta",
-      `${t.wagons}w ${t.className} · booked ${t.booked} · for the ${t.disposal}` +
+      `${t.wagons}w ${t.className} · booked ${t.booked} · ` +
+      (t.disposal === "through" ? "running through, not stopping here" : `for the ${t.disposal}`) +
       (t.facilityNeed && t.facilityNeed !== "none" && !t.serviced ? ` · wants ${t.facilityNeed.toLowerCase()}` : "")));
     if (t.vignette) left.append(el("div", "vig", "“" + t.vignette + "”"));
     b.append(left);
@@ -924,7 +928,9 @@ function openSheet(t, acts) {
   if (!acts.length) return;
   $("#m-title").textContent = `${t.headcode || ""} ${t.name || ""}`.trim();
   $("#m-sub").textContent = t.className
-    ? `${t.wagons} wagons · booked ${t.booked} · for the ${t.disposal}` : "";
+    ? `${t.wagons} wagons · booked ${t.booked} · ` +
+      (t.disposal === "through" ? "running through, not stopping here" : `for the ${t.disposal}`)
+    : "";
   const host = $("#m-actions"); host.textContent = "";
   for (const a of acts) {
     const b = el("button", "btn" + (a.danger ? " danger" : ""), a.label + (a.booked ? "  ✓ as booked" : ""));
@@ -996,7 +1002,7 @@ function renderSeatOffer(s) {
   const on = all.filter((b) => b.manned).length;
   $("#manned").textContent = on >= 2
     ? `${on} signallers on duty. More may join.`
-    : `${on} of 2 signallers on duty.`;
+    : `${on} of 2 signallers on duty — or take a box now and work both yourself.`;
   const host = $("#seat-offer"); host.textContent = "";
   for (const b of free) {
     const btn = el("button", "btn", "TAKE " + b.name);

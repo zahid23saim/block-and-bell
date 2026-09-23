@@ -79,7 +79,7 @@ export class Room {
         { id: "KEL", idx: 3, name: "KELBROOK BOX", seat: null, player: null },
       ],
       section: { id: "S1", miles: SECTION_MILES, lamp: "CLEAR", grant: null, occupiedBy: null },
-      train: { id: "12", label: "12 LIGHT ENGINE", dir: "N", at: SOUTH, disposal: null },
+      train: { id: "12", label: "THE LIGHT ENGINE", dir: "N", at: SOUTH, disposal: null },
       seats: {},
       register: [],
       shift: null,
@@ -314,7 +314,13 @@ export class Room {
     }
 
     state.phase = "SHIFT";
-    this.note(state, `Booking on — ${state.shift.lineName}. ${manned.length} box${manned.length === 1 ? "" : "es"} manned, ${n} on the line.`);
+    // Five of five cold readers thought they had been dropped into somebody
+    // else's game when DUNMERE/HARTLE became the generated names, and the two
+    // counts in the old line read as a contradiction to three of them.
+    const names = state.boxes.map((b) => b.name);
+    this.note(state,
+      `Booking on — ${state.shift.lineName}. The practice was at Dunmere and Hartle; ` +
+      `tonight you are ${names[0]}, your neighbour is ${names.slice(1).join(" and ")}.`);
     this.broadcast(state);
     this.ctx.storage.setAlarm(Date.now() + TICK_MS);
   }
@@ -444,9 +450,12 @@ export class Room {
           : sec.occupiedBy ? "The section is busy"
           : "Nothing is due this minute";
         if (unposted > 0) {
-          return `${where}. ${unposted} thing${unposted === 1 ? "" : "s"} in your book your neighbour cannot see.`;
+          // every other ribbon ends in an imperative; this one ended in a fact,
+          // and it is the exact moment the coaching stops
+          return `${where}. ${unposted} thing${unposted === 1 ? "" : "s"} in your book your ` +
+                 `neighbour cannot see — open BOOK and read one out to them.`;
         }
-        return `${where}. Nothing for you to do but watch it.`;
+        return `${where}. Nothing to do but watch it — say something to your neighbour.`;
       }
       const first = legal[0];
       return `${first.train} is at your box. ${first.hint ?? "Deal with it."}`;
@@ -462,7 +471,7 @@ export class Room {
                    : "Nothing yet. Dunmere is about to ask you.";
     if (s.grant && !s.grant.acceptedDisposal)
       return south ? "Asked. Wait for Hartle."
-                   : "Dunmere is asking for the 12 Light Engine. Your section is clear — say yes.";
+                   : "Dunmere is asking for the light engine. Your section is clear — say yes.";
     if (s.lamp === "GIVEN") return south ? "Hartle can take it. Send it." : "Given. It is coming.";
     if (s.lamp === "OCCUPIED" && !t.disposal)
       return south ? "In the section. Nothing else may enter."
