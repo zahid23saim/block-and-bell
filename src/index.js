@@ -6,13 +6,12 @@
  * a box can only ever be sent what that box is allowed to know.
  */
 
+import { newShift, sliceFor, tick, canPlace, place, shiftOver, buildReport } from "./shift.js";
+
 const CODE_ALPHABET = "ABCDEFGHJKLMNPRSTUVWXYZ"; // no I, O, Q — misread on a phone
 
-const BOX_DEFS = [
-  { id: "DUN", name: "DUNMERE BOX" },
-  { id: "HAR", name: "HARTLE BOX" },
-];
-
+const BOX_IDS = ["DUN", "HAR", "WES", "KEL"];
+const TICK_MS = 4000;    // one simulated minute every four real seconds
 const SECTION_MILES = 7;
 const SOUTH = "DUN";
 const NORTH = "HAR";
@@ -41,8 +40,7 @@ export class Room {
     );
   }
 
-  // --- persistence ------------------------------------------------
-  // State lives in SQLite, never in instance fields: hibernation wipes fields.
+  // --- persistence (never instance fields: hibernation wipes them) ---
 
   load() {
     const rows = [...this.sql.exec("SELECT doc FROM room WHERE id = 1")];
@@ -59,26 +57,23 @@ export class Room {
   freshState(code) {
     return {
       code,
-      phase: "TUTORIAL", // TUTORIAL -> READY
+      phase: "TUTORIAL", // TUTORIAL -> READY -> SHIFT -> REPORT
       seq: 0,
       clock: "22:40",
       paused: false,
-      boxes: BOX_DEFS.map((b) => ({ ...b, seat: null, player: null })),
-      section: {
-        id: "S1",
-        miles: SECTION_MILES,
-        lamp: "CLEAR", // CLEAR | GIVEN | OCCUPIED
-        grant: null,
-        occupiedBy: null,
-      },
-      // The light engine: no orders, no deadline, cannot be got wrong.
+      boxes: [
+        { id: "DUN", idx: 0, name: "DUNMERE BOX", seat: null, player: null },
+        { id: "HAR", idx: 1, name: "HARTLE BOX", seat: null, player: null },
+      ],
+      section: { id: "S1", miles: SECTION_MILES, lamp: "CLEAR", grant: null, occupiedBy: null },
       train: { id: "12", label: "12 LIGHT ENGINE", dir: "N", at: SOUTH, disposal: null },
       seats: {},
       register: [],
+      shift: null,
     };
   }
 
-  // --- fetch / upgrade --------------------------------------------
+  // --- fetch / upgrade ---------------------------------------------
 
   async fetch(request) {
     const url = new URL(request.url);
@@ -94,64 +89,71 @@ export class Room {
     if (request.headers.get("Upgrade") !== "websocket") {
       return new Response("expected websocket", { status: 426 });
     }
-
-    if (!this.load()) {
-      this.save(this.freshState(url.searchParams.get("code") || "ROOM"));
-    }
+    if (!this.load()) this.save(this.freshState(url.searchParams.get("code") || "ROOM"));
 
     const pair = new WebSocketPair();
-    // Hibernation: the DO may be evicted between messages and keep its sockets.
     this.ctx.acceptWebSocket(pair[1]);
     pair[1].serializeAttachment({ seatToken: null, boxId: null });
-
     return new Response(null, { status: 101, webSocket: pair[0] });
   }
 
-  // --- messaging ---------------------------------------------------
+  // --- the clock ----------------------------------------------------
+
+  async alarm() {
+    const state = this.load();
+    if (!state || state.phase !== "SHIFT" || !state.shift) return;
+
+    this.recomputePause(state);
+    if (!state.paused) {
+      tick(state.shift);
+      // release any train that has become ready to be offered
+      if (shiftOver(state.shift) || state.shift.clockMin > state.shift.window + 30) {
+        state.phase = "REPORT";
+        this.note(state, "The shift is over. The district office wants its report.");
+      }
+    }
+    this.broadcast(state);
+    if (state.phase === "SHIFT") await this.ctx.storage.setAlarm(Date.now() + TICK_MS);
+  }
+
+  // --- messaging ----------------------------------------------------
 
   async webSocketMessage(ws, raw) {
     let msg;
-    try {
-      msg = JSON.parse(raw);
-    } catch {
-      return;
-    }
+    try { msg = JSON.parse(raw); } catch { return; }
     const state = this.load();
     if (!state) return;
     const att = ws.deserializeAttachment() || {};
 
     if (msg.t === "hello") return this.onHello(ws, att, state, msg);
     if (msg.t === "claim_seat") return this.onClaimSeat(ws, att, state, msg);
-    if (msg.t === "act") return this.onAct(ws, att, state, msg);
     if (msg.t === "say") return this.onSay(ws, att, state, msg);
     if (msg.t === "ping") return this.send(ws, { t: "pong", at: msg.at });
+    if (msg.t === "begin") return this.onBegin(ws, att, state);
+    if (msg.t === "send_fact") return this.onSendFact(ws, att, state, msg);
+    if (msg.t === "act") {
+      return state.phase === "SHIFT"
+        ? this.onShiftAct(ws, att, state, msg)
+        : this.onTutorialAct(ws, att, state, msg);
+    }
   }
 
   onHello(ws, att, state, msg) {
-    // A reload is just a re-hello. The resume token IS the seat.
     let seatToken = msg.resumeToken;
     let seat = seatToken ? state.seats[seatToken] : null;
     if (!seat) seatToken = makeToken();
 
     const boxId = seat ? seat.boxId : null;
     ws.serializeAttachment({ seatToken, boxId });
-
     if (seat) {
       seat.lastSeen = Date.now();
-      // reattach the token to its box after a reload
       const box = state.boxes.find((b) => b.id === seat.boxId);
       if (box) box.seat = seatToken;
     }
 
     this.send(ws, {
-      t: "hello_ack",
-      v: 1,
-      roomCode: state.code,
-      seatToken,
-      boxId,
-      phase: state.phase,
+      t: "hello_ack", v: 1, roomCode: state.code, seatToken, boxId, phase: state.phase,
     });
-
     this.recomputePause(state);
     this.broadcast(state);
   }
@@ -159,11 +161,9 @@ export class Room {
   onClaimSeat(ws, att, state, msg) {
     const box = state.boxes.find((b) => b.id === msg.boxId);
     if (!box) return;
-
     if (box.seat && box.seat !== att.seatToken && this.isManned(state, box.id)) {
       return this.toast(ws, "That box is already worked. Take the other one.");
     }
-
     for (const b of state.boxes) if (b.seat === att.seatToken) b.seat = null;
 
     box.seat = att.seatToken;
@@ -185,167 +185,342 @@ export class Room {
     this.broadcast(state);
   }
 
-  // --- the block cycle --------------------------------------------
+  /** Post a card VERBATIM. You may not paraphrase what you have not read. */
+  onSendFact(ws, att, state, msg) {
+    if (state.phase !== "SHIFT" || !att.boxId) return;
+    const idx = state.boxes.findIndex((b) => b.id === att.boxId);
+    const fact = state.shift.facts.find((f) => f.id === msg.factId && f.heldBy === idx);
+    if (!fact) return this.toast(ws, "That card is not in your book.");
+    if ((fact.knownFrom ?? 0) > state.shift.clockMin) return;
 
-  onAct(ws, att, state, msg) {
+    const box = state.boxes[idx];
+    const slice = sliceFor(state.shift, idx);
+    const card = slice.book.find((c) => c.id === fact.id);
+    fact.posted = true;
+    state.register.push({
+      kind: "card", from: box.player || box.name, boxId: box.id,
+      text: card ? card.text : "(card)",
+    });
+    this.broadcast(state);
+  }
+
+  onBegin(ws, att, state) {
+    if (state.phase !== "READY") return;
+    const manned = state.boxes.filter((b) => this.isManned(state, b.id)).length;
+    state.shift = newShift(state.code, 1, 2);
+    if (!state.shift) return this.toast(ws, "The district office could not raise a shift. Try again.");
+    state.phase = "SHIFT";
+    this.note(state, `Booking on — ${state.shift.lineName}. ${manned} of 2 boxes manned.`);
+    this.broadcast(state);
+    this.ctx.storage.setAlarm(Date.now() + TICK_MS);
+  }
+
+  // --- the tutorial block cycle -------------------------------------
+
+  onTutorialAct(ws, att, state, msg) {
     if (!att.boxId) return this.toast(ws, "Take a box first.");
+    const legal = this.tutorialLegal(state, att.boxId).map((a) => a.action);
+    if (!legal.includes(msg.action)) return this.toast(ws, "Not yours to do, not just now.");
 
-    const legal = this.legalActions(state, att.boxId).map((a) => a.action);
-    if (!legal.includes(msg.action)) {
-      return this.toast(ws, "Not yours to do, not just now.");
-    }
-
-    const s = state.section;
-    const t = state.train;
+    const s = state.section, t = state.train;
     const me = state.boxes.find((b) => b.id === att.boxId);
     const who = me.player || me.name;
-    const args = msg.args || {};
 
     if (msg.action === "ASK") {
-      // TWO KEYS: you may not ask without naming where the train is going.
-      s.grant = { from: att.boxId, disposalIntent: args.disposalIntent, acceptedDisposal: null };
+      s.grant = { from: att.boxId, disposalIntent: msg.args?.disposalIntent, acceptedDisposal: null };
       this.note(state, `${who} asks Line Clear for the ${t.label}.`);
     } else if (msg.action === "GIVE") {
-      s.grant.acceptedDisposal = args.acceptedDisposal || s.grant.disposalIntent;
+      s.grant.acceptedDisposal = msg.args?.acceptedDisposal || s.grant.disposalIntent;
       s.lamp = "GIVEN";
       this.note(state, `${who} gives Line Clear.`);
     } else if (msg.action === "SEND_INTO_SECTION") {
-      // compare-and-set: the section physically cannot hold two trains
       if (s.occupiedBy) return this.toast(ws, "There is already a train in that section.");
-      s.occupiedBy = t.id;
-      s.lamp = "OCCUPIED";
-      t.at = NORTH;
+      s.occupiedBy = t.id; s.lamp = "OCCUPIED"; t.at = NORTH;
       this.note(state, `${who} sends the ${t.label} into the section.`);
     } else if (msg.action === "TO_SHED") {
       t.disposal = "SHED";
       this.note(state, `${who} puts the ${t.label} to the shed.`);
     } else if (msg.action === "CLEAR_MY_SECTION") {
-      s.occupiedBy = null;
-      s.lamp = "CLEAR";
-      s.grant = null;
+      s.occupiedBy = null; s.lamp = "CLEAR"; s.grant = null;
       state.phase = "READY";
       this.note(state, `${who} clears the section. The light engine is away.`);
     }
-
     this.broadcast(state);
   }
 
-  /** The server authors the buttons. The client renders exactly what it is given. */
-  legalActions(state, boxId) {
+  tutorialLegal(state, boxId) {
     if (state.phase !== "TUTORIAL" || state.paused) return [];
-    const s = state.section;
-    const t = state.train;
-
-    if (t.at === SOUTH && !s.grant && boxId === SOUTH) {
+    const s = state.section, t = state.train;
+    if (t.at === SOUTH && !s.grant && boxId === SOUTH)
       return [{ action: "ASK", label: "ASK", hint: "Tap this. You do not have to type.",
                 args: { sectionId: s.id, disposalIntent: "SHED" } }];
-    }
-    if (s.grant && !s.grant.acceptedDisposal && boxId === NORTH) {
+    if (s.grant && !s.grant.acceptedDisposal && boxId === NORTH)
       return [{ action: "GIVE", label: "GIVE LINE CLEAR", hint: "Your section is clear — say yes.",
                 args: { sectionId: s.id, acceptedDisposal: "SHED" } }];
-    }
-    if (s.lamp === "GIVEN" && boxId === SOUTH) {
+    if (s.lamp === "GIVEN" && boxId === SOUTH)
       return [{ action: "SEND_INTO_SECTION", label: "SEND INTO SECTION",
                 hint: "Hartle can take it. Send it.", args: { sectionId: s.id } }];
-    }
-    if (s.lamp === "OCCUPIED" && t.at === NORTH && !t.disposal && boxId === NORTH) {
+    if (s.lamp === "OCCUPIED" && t.at === NORTH && !t.disposal && boxId === NORTH)
       return [{ action: "TO_SHED", label: "TO THE SHED", hint: "Put it somewhere.", args: {} }];
-    }
-    if (s.lamp === "OCCUPIED" && t.disposal && boxId === NORTH) {
+    if (s.lamp === "OCCUPIED" && t.disposal && boxId === NORTH)
       return [{ action: "CLEAR_MY_SECTION", label: "CLEAR MY SECTION",
                 hint: "Tell Dunmere the section is clear.", args: { sectionId: s.id } }];
-    }
     return [];
   }
 
-  /** The ribbon never blames, never says "wire down", never uses an unglossed term. */
+  // --- the real shift ------------------------------------------------
+
+  onShiftAct(ws, att, state, msg) {
+    if (!att.boxId) return this.toast(ws, "Take a box first.");
+    const idx = state.boxes.findIndex((b) => b.id === att.boxId);
+    const sh = state.shift;
+    const legal = this.shiftLegal(state, idx);
+    const match = legal.find((a) => a.action === msg.action && a.trainId === msg.args?.trainId);
+    if (!match) return this.toast(ws, "Not yours to do, not just now.");
+
+    const me = state.boxes[idx];
+    const who = me.player || me.name;
+    const t = sh.trains.find((x) => x.id === msg.args.trainId);
+    const sec = sh.sections[0];
+
+    switch (msg.action) {
+      case "ASK":
+        // TWO KEYS: you may not ask without naming where it is going.
+        sec.grant = { from: idx, trainId: t.id, intent: msg.args.disposalIntent || t.disposal, given: false };
+        this.note(state, `${who} asks Line Clear for the ${t.headcode} ${t.name}, for the ${sec.grant.intent}.`);
+        break;
+
+      case "GIVE":
+        sec.grant.given = true;
+        sec.lamp = "GIVEN";
+        this.note(state, `${who} gives Line Clear for the ${t.headcode} ${t.name}.`);
+        break;
+
+      case "HOLD_THE_LINE":
+        this.note(state, `${who} holds the line: ${msg.args.reason || "cannot take it yet"}.`);
+        sec.grant = null;
+        break;
+
+      case "SEND_INTO_SECTION": {
+        if (sec.occupiedBy) return this.toast(ws, "There is already a train in that section.");
+        const to = t.northbound ? t.at + 1 : t.at - 1;
+        const slow = sh.clockMin < sec.slowUntil ? sec.slowsBy : 0;
+        const transit = Math.max(2, Math.round(sec.miles / 2) + slow);
+        sec.occupiedBy = t.id; sec.lamp = "OCCUPIED"; sec.grant = null;
+        t.state = "RUNNING"; t.pendingTo = to; t.arriveAt = sh.clockMin + transit;
+        this.note(state, `${who} sends the ${t.headcode} ${t.name} into the section.`);
+        break;
+      }
+
+      case "TAKE_WATER":
+      case "TAKE_COAL":
+        t.serviced = true;
+        t.readyClock = sh.clockMin + 3;
+        this.note(state, `${who} waters the ${t.headcode} ${t.name}.`);
+        break;
+
+      case "TO_PLATFORM": case "TO_LOOP": case "TO_YARD": case "TO_SHED": {
+        const road = msg.action.slice(3).toLowerCase();
+        if (!canPlace(sh, t, idx, road)) {
+          return this.toast(ws, `The ${road} will not take it. Ask your neighbour why.`);
+        }
+        place(sh, t, idx, road);
+        this.note(state, `${who} puts the ${t.headcode} ${t.name} in the ${road}.`);
+        break;
+      }
+
+      case "SHUNT": {
+        // The expensive way out of a misfile. Always possible, never cheap.
+        t.shuntUntil = sh.clockMin + 8;
+        this.note(state, `${who} sets about shunting the ${t.headcode} ${t.name}. It will take a while.`);
+        break;
+      }
+    }
+
+    if (shiftOver(sh)) {
+      state.phase = "REPORT";
+      this.note(state, "Every working is away. That is the shift.");
+    }
+    this.broadcast(state);
+  }
+
+  /**
+   * The server authors the buttons. A box is only ever offered what it may
+   * actually do, so a cold player cannot reach an illegal state by curiosity.
+   */
+  shiftLegal(state, idx) {
+    const sh = state.shift;
+    if (!sh || state.phase !== "SHIFT" || state.paused) return [];
+    const out = [];
+    const sec = sh.sections[0];
+    const boxCount = sh.line.boxes.length;
+    const finalOf = (t) => (t.dest === "THROUGH" ? (t.northbound ? boxCount - 1 : 0) : t.dest);
+
+    for (const t of sh.trains) {
+      if (t.at !== idx || t.state === "DONE" || t.state === "RUNNING") continue;
+      if (t.readyClock > sh.clockMin) continue;
+      if (t.shuntUntil && sh.clockMin < t.shuntUntil) continue;
+
+      const label = `${t.headcode} ${t.name}`;
+
+      // water and coal, if this box can actually provide it now
+      if (!t.serviced && t.facilityNeed !== "none") {
+        const down = sh.line.boxes[idx].facilityDownUntil?.[t.facilityNeed] ?? 0;
+        if (sh.line.boxes[idx].facilities[t.facilityNeed] && sh.clockMin >= down) {
+          out.push({
+            action: t.facilityNeed === "WATER" ? "TAKE_WATER" : "TAKE_COAL",
+            label: t.facilityNeed === "WATER" ? "TAKE WATER" : "TAKE COAL",
+            trainId: t.id, train: label,
+          });
+        }
+      }
+
+      if (t.at === finalOf(t)) {
+        // it is home: it must be PUT somewhere
+        const roads = [
+          ["TO_PLATFORM", "platform", "TO THE PLATFORM"],
+          ["TO_LOOP", "loop", "INTO THE LOOP"],
+          ["TO_YARD", "yard", "INTO THE YARD"],
+          ["TO_SHED", "shed", "TO THE SHED"],
+        ];
+        let any = false;
+        for (const [action, road, lab] of roads) {
+          if (canPlace(sh, t, idx, road)) {
+            any = true;
+            out.push({
+              action, label: lab, trainId: t.id, train: label,
+              booked: road === t.disposal,
+            });
+          }
+        }
+        if (!any) {
+          out.push({
+            action: "SHUNT", label: "SHUNT IT", trainId: t.id, train: label,
+            hint: "Nowhere will take it as it stands. This costs minutes.",
+          });
+        }
+      } else if (!sec.grant && !sec.occupiedBy) {
+        out.push({
+          action: "ASK", label: "ASK LINE CLEAR", trainId: t.id, train: label,
+          args: { disposalIntent: t.disposal },
+        });
+      }
+    }
+
+    // the other end of the two keys
+    if (sec.grant && !sec.grant.given && sec.grant.from !== idx) {
+      const t = sh.trains.find((x) => x.id === sec.grant.trainId);
+      out.push({
+        action: "GIVE", label: "GIVE LINE CLEAR", trainId: sec.grant.trainId,
+        train: t ? `${t.headcode} ${t.name}` : "", hint: `for the ${sec.grant.intent}`,
+      });
+      out.push({
+        action: "HOLD_THE_LINE", label: "HOLD THE LINE", trainId: sec.grant.trainId,
+        train: t ? `${t.headcode} ${t.name}` : "", danger: true,
+      });
+    }
+    if (sec.grant && sec.grant.given && sec.grant.from === idx && !sec.occupiedBy) {
+      const t = sh.trains.find((x) => x.id === sec.grant.trainId);
+      out.push({
+        action: "SEND_INTO_SECTION", label: "SEND INTO SECTION",
+        trainId: sec.grant.trainId, train: t ? `${t.headcode} ${t.name}` : "",
+      });
+    }
+    return out;
+  }
+
   ribbon(state, boxId) {
     if (state.paused) {
       const gone = state.boxes.find((b) => b.seat && !this.isManned(state, b.id));
       return gone ? `WAITING FOR ${gone.name.split(" ")[0]}` : "WAITING";
     }
-    if (state.phase === "READY") {
+    if (state.phase === "READY")
       return "The light engine is away. That was the whole job — and you did it to each other.";
+    if (state.phase === "REPORT") return "The shift is over.";
+
+    if (state.phase === "SHIFT") {
+      const idx = state.boxes.findIndex((b) => b.id === boxId);
+      const legal = this.shiftLegal(state, idx);
+      const sec = state.shift.sections[0];
+      if (sec.grant && !sec.grant.given && sec.grant.from !== idx)
+        return "Your neighbour is asking for the road. Can you take it?";
+      if (legal.some((a) => a.action === "SEND_INTO_SECTION")) return "Line Clear given. Send it.";
+      if (legal.length === 0) return "Nothing to do this minute. Read your book.";
+      const first = legal[0];
+      return `${first.train} is at your box. ${first.hint ?? "Deal with it."}`;
     }
 
-    const s = state.section;
-    const t = state.train;
-    const south = boxId === SOUTH;
-
-    if (t.at === SOUTH && !s.grant) {
-      return south
-        ? "The light engine wants to go north. Ask Hartle if they can take it."
-        : "Nothing yet. Dunmere is about to ask you.";
-    }
-    if (s.grant && !s.grant.acceptedDisposal) {
-      return south
-        ? "Asked. Wait for Hartle."
-        : "Dunmere is asking for the 12 Light Engine. Your section is clear — say yes.";
-    }
-    if (s.lamp === "GIVEN") {
-      return south ? "Hartle can take it. Send it." : "Given. It is coming.";
-    }
-    if (s.lamp === "OCCUPIED" && !t.disposal) {
-      return south
-        ? "In the section. Nothing else may enter."
-        : "It is in. Seven miles. Put it somewhere when it gets here.";
-    }
-    if (s.lamp === "OCCUPIED" && t.disposal) {
-      return south
-        ? "In the section. Nothing else may enter."
-        : "Tell Dunmere the section is clear or nothing else can move.";
-    }
+    // tutorial
+    const s = state.section, t = state.train, south = boxId === SOUTH;
+    if (t.at === SOUTH && !s.grant)
+      return south ? "The light engine wants to go north. Ask Hartle if they can take it."
+                   : "Nothing yet. Dunmere is about to ask you.";
+    if (s.grant && !s.grant.acceptedDisposal)
+      return south ? "Asked. Wait for Hartle."
+                   : "Dunmere is asking for the 12 Light Engine. Your section is clear — say yes.";
+    if (s.lamp === "GIVEN") return south ? "Hartle can take it. Send it." : "Given. It is coming.";
+    if (s.lamp === "OCCUPIED" && !t.disposal)
+      return south ? "In the section. Nothing else may enter."
+                   : "It is in. Seven miles. Put it somewhere when it gets here.";
+    if (s.lamp === "OCCUPIED" && t.disposal)
+      return south ? "In the section. Nothing else may enter."
+                   : "Tell Dunmere the section is clear or nothing else can move.";
     return "";
   }
 
-  // --- per-seat slice ----------------------------------------------
+  // --- per-seat slice -------------------------------------------------
 
-  /**
-   * THE SPLIT RULE, enforced at the wire.
-   * A box is sent its own trains in full and the neighbour's only as a lamp.
-   * Nothing a box may not know ever leaves the server.
-   */
   snapshot(state, boxId) {
-    const s = state.section;
-    const t = state.train;
     const me = state.boxes.find((b) => b.id === boxId) || null;
-    const other = state.boxes.find((b) => b.id !== boxId) || null;
+    const idx = me ? state.boxes.indexOf(me) : -1;
 
-    const mine = [];
-    if (me && t.at === me.id) {
-      mine.push({ id: t.id, label: t.label, dir: t.dir, disposal: t.disposal });
-    }
-
-    return {
-      t: "snapshot",
-      seq: state.seq,
-      phase: state.phase,
-      clock: state.clock,
+    const base = {
+      t: "snapshot", seq: state.seq, phase: state.phase, code: state.code,
       paused: state.paused,
-      code: state.code,
       you: me ? { boxId: me.id, boxName: me.name, name: me.player } : { boxId: null },
       boxes: state.boxes.map((b) => ({
-        id: b.id,
-        name: b.name,
-        manned: this.isManned(state, b.id),
-        player: b.player,
-        you: !!me && b.id === me.id,
+        id: b.id, name: b.name, manned: this.isManned(state, b.id),
+        player: b.player, you: !!me && b.id === me.id,
       })),
-      section: other
-        ? {
-            id: s.id,
-            to: other.name,
-            miles: s.miles,
-            lamp: s.lamp,
-            // the neighbour's grant reaches you as a lamp, never as their reasoning
-            asked: !!s.grant,
-            occupied: !!s.occupiedBy,
-          }
-        : null,
-      trains: mine,
       ribbon: this.ribbon(state, boxId),
-      legalActions: me ? this.legalActions(state, me.id) : [],
       register: state.register.slice(-40),
+    };
+
+    if (state.phase === "SHIFT" || state.phase === "REPORT") {
+      if (!me) return { ...base, clock: state.shift?.startClock ?? state.clock, waiting: true };
+      const slice = sliceFor(state.shift, idx);
+      return {
+        ...base,
+        clock: slice.clock,
+        lineName: slice.lineName,
+        box: slice.box,
+        roads: slice.roads,
+        trains: slice.trains,
+        sections: slice.sections,
+        book: slice.book,
+        delay: slice.delay,
+        legalActions: this.shiftLegal(state, idx),
+        report: state.phase === "REPORT"
+          ? buildReport(state.shift, state.register, state.boxes.map((b) => b.player || b.name))
+          : null,
+      };
+    }
+
+    // tutorial / lobby
+    const s = state.section;
+    const other = state.boxes.find((b) => b.id !== boxId) || null;
+    const t = state.train;
+    return {
+      ...base,
+      clock: state.clock,
+      section: other ? {
+        id: s.id, to: other.name, miles: s.miles, lamp: s.lamp,
+        asked: !!s.grant, occupied: !!s.occupiedBy,
+      } : null,
+      trains: me && t.at === me.id
+        ? [{ id: t.id, headcode: "12", name: "LIGHT ENGINE", disposal: t.disposal }]
+        : [],
+      legalActions: me ? this.tutorialLegal(state, me.id) : [],
     };
   }
 
@@ -359,21 +534,9 @@ export class Room {
     }
   }
 
-  send(ws, obj) {
-    try {
-      ws.send(JSON.stringify(obj));
-    } catch {
-      /* socket going away; the next hello heals it */
-    }
-  }
-
-  toast(ws, text) {
-    this.send(ws, { t: "toast", text });
-  }
-
-  note(state, text) {
-    state.register.push({ kind: "note", text });
-  }
+  send(ws, obj) { try { ws.send(JSON.stringify(obj)); } catch {} }
+  toast(ws, text) { this.send(ws, { t: "toast", text }); }
+  note(state, text) { state.register.push({ kind: "note", text }); }
 
   isManned(state, boxId) {
     const box = state.boxes.find((b) => b.id === boxId);
@@ -385,17 +548,13 @@ export class Room {
     return false;
   }
 
-  // A dropped socket pauses the clock. It never blames the player who left.
   async webSocketClose() {
     const state = this.load();
     if (!state) return;
     this.recomputePause(state);
     this.broadcast(state);
   }
-
-  async webSocketError() {
-    return this.webSocketClose();
-  }
+  async webSocketError() { return this.webSocketClose(); }
 
   recomputePause(state) {
     const seated = state.boxes.filter((b) => b.seat);
@@ -424,9 +583,7 @@ export default {
       const code = (url.searchParams.get("room") || "").toUpperCase();
       if (!/^[A-Z]{4}$/.test(code)) return new Response("bad room code", { status: 400 });
       const stub = env.ROOM.get(env.ROOM.idFromName(code));
-      return stub.fetch(
-        new Request(`https://do/ws?code=${code}`, { headers: request.headers })
-      );
+      return stub.fetch(new Request(`https://do/ws?code=${code}`, { headers: request.headers }));
     }
 
     return env.ASSETS.fetch(request);

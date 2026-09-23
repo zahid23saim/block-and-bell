@@ -5,6 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>BLOCK &amp; BELL — one track, two boxes</title>
 <meta name="description" content="Two strangers work a single-track railway from opposite ends. Neither can see the other's line, and each one is holding the other's rulebook.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%230C0D0F'/%3E%3Ccircle cx='16' cy='15' r='8' fill='%23E8A33D'/%3E%3Ccircle cx='16' cy='15' r='8' fill='none' stroke='%23C89B3C' stroke-width='2.5'/%3E%3Crect x='14.5' y='23' width='3' height='6' fill='%23C89B3C'/%3E%3C/svg%3E">
+<meta property="og:title" content="BLOCK &amp; BELL">
+<meta property="og:description" content="Two strangers work a single-track railway from opposite ends. Neither can see the other’s line, and each one is holding the other’s rulebook.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://block-and-bell.zahid23saim.workers.dev">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="theme-color" content="#0C0D0F">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Zilla+Slab:wght@600&display=swap" rel="stylesheet">
@@ -16,114 +23,161 @@
   --chalk:#F2EDE3; --chalk-dim:#9A968D; --paper:#EDE3CE; --ink:#1C1A17;
   --mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
   --slab:'Zilla Slab',Georgia,serif;
-  --sans:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
 }
 *{box-sizing:border-box}
-html,body{margin:0;padding:0}
+html,body{margin:0;padding:0;height:100%}
 body{
   background:var(--lamp-black); color:var(--chalk);
-  font-family:var(--sans); font-size:15px; line-height:1.45;
-  -webkit-text-size-adjust:100%;
-  min-height:100dvh; overflow-x:hidden;
+  font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+  font-size:15px; line-height:1.45; -webkit-text-size-adjust:100%;
+  overflow-x:hidden;
 }
-button{font:inherit;color:inherit;cursor:pointer}
+button{font:inherit;color:inherit;cursor:pointer;border-radius:0}
 .mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
 .wrap{max-width:560px;margin:0 auto;padding:0 16px;min-height:100dvh;display:flex;flex-direction:column}
+.hidden{display:none !important}
 
 /* ---------------------------------------------------------- landing */
-#landing{flex:1;display:flex;flex-direction:column;justify-content:center;gap:22px;padding:32px 0}
+#landing{flex:1;display:flex;flex-direction:column;justify-content:center;gap:20px;padding:32px 0}
 .lamp{width:54px;height:54px;border-radius:50%;border:3px solid var(--brass);
   background:radial-gradient(circle at 50% 45%,var(--oil-amber),#7a4d12 70%);
   box-shadow:0 0 26px rgba(232,163,61,.38)}
 h1{font-family:var(--mono);font-weight:600;letter-spacing:.06em;font-size:30px;margin:0}
 .sub{color:var(--chalk-dim);margin:0;max-width:34ch}
 .fine{color:var(--chalk-dim);font-size:13px;margin:0}
-.btn{display:block;width:100%;min-height:56px;padding:14px 18px;margin-top:10px;
+.btn{display:block;width:100%;min-height:52px;padding:12px 16px;margin-top:10px;
   background:transparent;border:1px solid var(--brass);color:var(--brass);
-  font-family:var(--mono);font-weight:600;letter-spacing:.08em;text-align:left;
-  transition:background 120ms ease,color 120ms ease}
+  font-family:var(--mono);font-weight:600;letter-spacing:.06em;text-align:left;
+  transition:background 120ms ease}
 .btn:hover{background:rgba(200,155,60,.10)}
 .btn[disabled]{border-color:var(--brass-dim);color:var(--brass-dim);cursor:default}
 .btn.ghost{border-color:var(--box-edge);color:var(--chalk-dim)}
-
-/* ---------------------------------------------------------- code entry */
+.btn.danger{border-color:var(--signal-red);color:var(--signal-red)}
+.btn .sub2{display:block;font-family:system-ui;font-weight:400;letter-spacing:0;
+  color:var(--chalk-dim);font-size:13px;margin-top:3px}
 #codebox{display:flex;gap:8px;margin-top:10px}
 #codebox input{width:56px;height:56px;text-align:center;font-family:var(--mono);
   font-size:26px;background:var(--box-dark);border:1px solid var(--box-edge);
-  color:var(--chalk);text-transform:uppercase;border-radius:0}
+  color:var(--chalk);text-transform:uppercase}
 #codebox input:focus{outline:2px solid var(--brass);outline-offset:-2px}
-.bigcode{font-family:var(--mono);font-size:64px;color:var(--brass);letter-spacing:.10em;margin:6px 0}
+.bigcode{font-family:var(--mono);font-size:56px;color:var(--brass);letter-spacing:.10em;margin:6px 0}
 
-/* ---------------------------------------------------------- game chrome */
+/* ---------------------------------------------------------- chrome */
 #game{display:none;flex:1;flex-direction:column;min-height:100dvh}
 .status{display:flex;align-items:center;gap:12px;height:44px;flex:0 0 44px;
   border-bottom:1px solid var(--box-edge);font-family:var(--mono);font-size:13px}
 .status .code{color:var(--brass);letter-spacing:.12em}
+.status .spacer{flex:1}
 .wire-ok{color:var(--lamp-green)} .wire-bad{color:var(--signal-red)}
-.ribbon{min-height:36px;display:flex;align-items:center;padding:8px 0;
+.ribbon{min-height:36px;display:flex;align-items:center;padding:9px 0;
   font-size:15px;line-height:20px;border-bottom:1px solid var(--box-edge)}
 .ribbon.waiting{color:var(--oil-amber);font-family:var(--mono);letter-spacing:.06em}
 
-/* ---------------------------------------------------------- the board */
-.board{padding:14px 0;border-bottom:1px solid var(--box-edge)}
+/* ---------------------------------------------------------- board */
+.board{padding:12px 0}
 .farbox{display:flex;justify-content:space-between;align-items:baseline;
-  font-family:var(--mono);font-size:12px;letter-spacing:.08em;color:var(--chalk-dim)}
+  font-family:var(--mono);font-size:12px;letter-spacing:.06em;color:var(--chalk-dim)}
 .farbox b{color:var(--chalk);font-weight:600}
-.corridor{margin:10px 0 4px;border-left:2px solid var(--box-edge);padding-left:14px}
-.mile{display:flex;gap:10px;align-items:baseline;font-family:var(--mono);font-size:13px;
-  color:var(--chalk-dim);min-height:20px}
-.mile .n{width:1.5ch;color:#4a4d54}
+.corridor{margin:8px 0 6px;border-left:2px solid var(--box-edge);padding-left:12px}
+.mile{display:flex;gap:10px;align-items:baseline;font-family:var(--mono);font-size:12.5px;
+  color:#4a4d54;min-height:17px}
+.mile .n{width:1.5ch}
 .mile.here{color:var(--chalk)}
-.lamptext{font-family:var(--mono);font-size:13px;letter-spacing:.06em;
-  transition:color 120ms ease}
-.lamp-CLEAR{color:var(--chalk-dim)}
-.lamp-GIVEN{color:var(--lamp-green)}
-.lamp-OCCUPIED{color:var(--oil-amber)}
-.roads{margin-top:12px;display:flex;flex-direction:column;gap:6px}
-.road{display:flex;justify-content:space-between;align-items:center;
-  border:1px solid var(--box-edge);background:var(--box-dark);padding:10px 12px;min-height:44px}
-.road .label{font-family:var(--mono);font-size:12px;letter-spacing:.08em;color:var(--chalk-dim)}
-.road .val{font-family:var(--mono);font-size:14px}
-.train{border-color:var(--brass-dim)}
-.actions{display:flex;flex-direction:column;gap:8px;margin-top:14px}
-.hint{color:var(--chalk-dim);font-size:13px;margin:2px 0 0}
+.mile .occ{color:var(--oil-amber)}
+.lamptext{font-family:var(--mono);font-size:13px;letter-spacing:.05em;padding:2px 0 8px}
+.lamp-CLEAR{color:var(--chalk-dim)} .lamp-GIVEN{color:var(--lamp-green)} .lamp-OCCUPIED{color:var(--oil-amber)}
+.roadline{display:flex;flex-wrap:wrap;gap:6px 14px;font-family:var(--mono);font-size:12px;
+  letter-spacing:.05em;color:var(--chalk-dim);border-top:1px solid var(--box-edge);padding-top:10px}
+.roadline b{color:var(--chalk);font-weight:400}
+.trains{display:flex;flex-direction:column;gap:7px;margin-top:10px}
+.train{width:100%;text-align:left;background:var(--box-dark);border:1px solid var(--box-edge);
+  padding:10px 12px;min-height:60px;display:flex;justify-content:space-between;align-items:center;gap:10px}
+.train.actionable{border-color:var(--brass-dim)}
+.train .id{font-family:var(--mono);font-size:16px}
+.train .meta{font-size:12.5px;color:var(--chalk-dim)}
+.train .vig{font-size:12.5px;color:var(--chalk-dim);font-style:italic}
+.train .chev{color:var(--brass);font-family:var(--mono)}
+.empty{color:var(--chalk-dim);font-size:13.5px;padding:8px 0}
 
-/* ---------------------------------------------------------- sheet */
-.tabs{display:flex;gap:0;height:48px;flex:0 0 48px;border-bottom:1px solid var(--box-edge)}
+/* ---------------------------------------------------------- tabs */
+.tabs{display:flex;height:46px;flex:0 0 46px;border-bottom:1px solid var(--box-edge);
+  border-top:1px solid var(--box-edge);margin-top:8px}
 .tabs button{flex:1;background:transparent;border:0;border-bottom:2px solid transparent;
-  font-family:var(--mono);font-size:12px;letter-spacing:.10em;color:var(--chalk-dim)}
+  font-family:var(--mono);font-size:12px;letter-spacing:.08em;color:var(--chalk-dim)}
 .tabs button[aria-selected=true]{color:var(--brass);border-bottom-color:var(--brass)}
-.sheet{flex:1;overflow-y:auto;padding:12px 0 8px}
+.badge{display:inline-block;min-width:16px;padding:0 4px;margin-left:5px;
+  background:var(--brass);color:var(--lamp-black);font-size:11px;border-radius:8px}
+.sheet{flex:1;overflow-y:auto;padding:12px 0 8px;min-height:120px}
+
+/* ---------------------------------------------------------- book */
+.card{background:var(--paper);color:var(--ink);padding:11px 12px;margin-bottom:8px;
+  font-family:var(--slab);font-size:14.5px;line-height:1.4;position:relative}
+.card .k{display:block;font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;
+  color:#6b6357;margin-bottom:4px}
+.card button{display:block;margin-top:10px;background:transparent;border:1px solid #8a8073;
+  color:#3a352c;font-family:var(--mono);font-size:11px;letter-spacing:.08em;
+  padding:8px 12px;min-height:38px}
+.card.posted{opacity:.55}
+.card.posted button{display:none}
+.card .sent{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;color:#6b6357}
+
+/* ---------------------------------------------------------- the Notice */
+.notice{background:var(--paper);color:var(--ink);padding:20px 18px 22px;margin:14px 0}
+.notice h2{font-family:var(--slab);font-size:26px;letter-spacing:.05em;text-transform:uppercase;
+  margin:0 0 2px;font-weight:600}
+.notice .where{font-family:var(--mono);font-size:12px;letter-spacing:.06em;color:#6b6357;margin-bottom:14px}
+.notice table{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:12.5px}
+.notice td{padding:5px 0;border-bottom:1px solid #d5c9ae;vertical-align:baseline}
+.notice td.late{text-align:right;white-space:nowrap}
+.notice td.bad{color:#9c2b22}
+.notice .tot{display:flex;justify-content:space-between;align-items:baseline;margin-top:14px;
+  font-family:var(--mono);font-size:13px}
+.notice .grade{font-family:var(--slab);font-size:40px;line-height:1;font-weight:600}
+.notice .verdict{font-family:var(--slab);font-size:15px;margin-top:6px}
+.notice blockquote{margin:16px 0 0;padding:10px 12px;background:#e2d6bc;
+  font-family:var(--slab);font-size:14.5px;font-style:italic}
+.notice blockquote cite{display:block;font-style:normal;font-family:var(--mono);
+  font-size:10.5px;letter-spacing:.08em;color:#6b6357;margin-top:6px}
+
+/* ---------------------------------------------------------- register */
 .reg{display:flex;flex-direction:column;gap:7px;font-size:14px}
 .reg .note{color:var(--chalk-dim);font-family:var(--mono);font-size:12.5px}
 .reg .say b{color:var(--brass);font-weight:600}
+.reg .card2{background:var(--paper);color:var(--ink);padding:9px 11px;font-family:var(--slab);font-size:14px}
+.reg .card2 b{display:block;font-family:var(--mono);font-size:10.5px;letter-spacing:.09em;color:#6b6357}
 .composer{display:flex;gap:8px;padding:8px 0 14px;border-top:1px solid var(--box-edge)}
 .composer input{flex:1;min-height:44px;background:var(--box-dark);border:1px solid var(--box-edge);
   color:var(--chalk);padding:0 12px;font:inherit}
 .composer input:focus{outline:2px solid var(--brass);outline-offset:-2px}
-.composer button{min-height:44px;padding:0 16px;background:transparent;border:1px solid var(--brass);
-  color:var(--brass);font-family:var(--mono);font-size:12px;letter-spacing:.08em}
+.composer button{min-height:44px;padding:0 14px;background:transparent;border:1px solid var(--brass);
+  color:var(--brass);font-family:var(--mono);font-size:12px;letter-spacing:.06em}
 
-/* ---------------------------------------------------------- toast */
+/* ---------------------------------------------------------- sheet modal */
+#modal{position:fixed;inset:0;background:rgba(6,7,8,.72);display:none;
+  align-items:flex-end;justify-content:center;z-index:20}
+#modal.on{display:flex}
+.modalbox{background:var(--lamp-black);border-top:1px solid var(--brass);
+  width:100%;max-width:560px;padding:16px 16px 22px}
+.modalbox h3{font-family:var(--mono);font-size:15px;margin:0 0 2px;letter-spacing:.04em}
+.modalbox p{margin:0 0 12px;color:var(--chalk-dim);font-size:13px}
+
 #toast{position:fixed;left:50%;transform:translateX(-50%);bottom:24px;max-width:90vw;
   background:var(--box-dark);border:1px solid var(--signal-red);color:var(--chalk);
-  padding:12px 16px;font-size:14px;opacity:0;pointer-events:none;transition:opacity 180ms ease}
+  padding:12px 16px;font-size:14px;opacity:0;pointer-events:none;transition:opacity 180ms ease;z-index:30}
 #toast.on{opacity:1}
-.hidden{display:none !important}
 @media (prefers-reduced-motion:reduce){*{transition:none !important;animation:none !important}}
 </style>
 </head>
 <body>
 <div class="wrap">
 
-  <!-- ------------------------------------------------- landing -->
   <section id="landing">
     <div class="lamp" aria-hidden="true"></div>
     <div>
       <h1>BLOCK &amp; BELL</h1>
       <p class="sub">One single track. Two signal boxes. You can only see your own — so say it out loud.</p>
     </div>
-    <p class="fine">Two to four players · about six minutes a shift · no app, no account, no name required.</p>
+    <p class="fine">Two players · about six minutes a shift · no app, no account, no name required.</p>
 
     <div id="pick">
       <button class="btn" id="btn-open">OPEN A BOX</button>
@@ -133,27 +187,29 @@ h1{font-family:var(--mono);font-weight:600;letter-spacing:.06em;font-size:30px;m
     <div id="joining" class="hidden">
       <p class="fine">Type the four letters the other signaller gave you.</p>
       <div id="codebox">
-        <input maxlength="1" inputmode="latin" autocomplete="off" aria-label="code letter 1">
-        <input maxlength="1" inputmode="latin" autocomplete="off" aria-label="code letter 2">
-        <input maxlength="1" inputmode="latin" autocomplete="off" aria-label="code letter 3">
-        <input maxlength="1" inputmode="latin" autocomplete="off" aria-label="code letter 4">
+        <input maxlength="1" autocomplete="off" aria-label="code letter 1">
+        <input maxlength="1" autocomplete="off" aria-label="code letter 2">
+        <input maxlength="1" autocomplete="off" aria-label="code letter 3">
+        <input maxlength="1" autocomplete="off" aria-label="code letter 4">
       </div>
       <button class="btn" id="btn-enter">ENTER THE BOX</button>
     </div>
 
     <div id="waiting" class="hidden">
-      <p class="fine">Your code. Read your book while you wait.</p>
+      <p class="fine">Your code. Send it to whoever is working the other box.</p>
       <div class="bigcode mono" id="code-out">····</div>
       <button class="btn ghost" id="btn-copy">COPY INVITE LINK</button>
-      <p class="fine" id="manned">1 of 2 signallers on duty.</p>
+      <p class="fine" id="manned"></p>
+      <div id="seat-offer"></div>
     </div>
   </section>
 
-  <!-- ------------------------------------------------- game -->
   <section id="game">
     <div class="status">
       <span class="mono" id="clock">22:40</span>
       <span class="code" id="code-chip">····</span>
+      <span class="spacer"></span>
+      <span id="delay" class="mono"></span>
       <span id="wire" class="wire-ok">● wire good</span>
     </div>
 
@@ -162,20 +218,21 @@ h1{font-family:var(--mono);font-weight:600;letter-spacing:.06em;font-size:30px;m
     <div class="board">
       <div class="farbox">
         <span>▣ <b id="far-name">—</b></span>
-        <span id="far-miles">7 MILES</span>
+        <span id="far-miles"></span>
       </div>
       <div class="corridor" id="corridor"></div>
       <div class="lamptext lamp-CLEAR" id="lamptext">▣ CLEAR</div>
-      <div class="roads" id="roads"></div>
-      <div class="actions" id="actions"></div>
+      <div class="roadline" id="roadline"></div>
+      <div class="trains" id="trains"></div>
     </div>
 
     <div class="tabs" role="tablist">
       <button role="tab" aria-selected="true" data-tab="board">BOARD</button>
+      <button role="tab" aria-selected="false" data-tab="book">BOOK<span class="badge hidden" id="book-badge">0</span></button>
       <button role="tab" aria-selected="false" data-tab="wire">WIRE</button>
     </div>
 
-    <div class="sheet" id="sheet"><div class="reg" id="register"></div></div>
+    <div class="sheet" id="sheet"></div>
 
     <div class="composer">
       <input id="say" placeholder="say something" maxlength="240" autocomplete="off">
@@ -183,6 +240,11 @@ h1{font-family:var(--mono);font-weight:600;letter-spacing:.06em;font-size:30px;m
     </div>
   </section>
 </div>
+
+<div id="modal"><div class="modalbox">
+  <h3 id="m-title"></h3><p id="m-sub"></p><div id="m-actions"></div>
+  <button class="btn ghost" id="m-close">NEVER MIND</button>
+</div></div>
 
 <div id="toast" role="status" aria-live="polite"></div>
 
@@ -192,71 +254,51 @@ h1{font-family:var(--mono);font-weight:600;letter-spacing:.06em;font-size:30px;m
 const $ = (s) => document.querySelector(s);
 const el = (t, c, txt) => { const n = document.createElement(t); if (c) n.className = c; if (txt != null) n.textContent = txt; return n; };
 
-let ws = null, room = null, seatToken = null, myBox = null, lastSeq = -1;
+let ws = null, room = null, seatToken = null, lastSeq = -1, tab = "board", S = null;
 
-// ---- toast -----------------------------------------------------------
 let toastTimer = null;
 function toast(text) {
-  const t = $("#toast");
-  t.textContent = text; t.classList.add("on");
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => t.classList.remove("on"), 3200);
+  const t = $("#toast"); t.textContent = text; t.classList.add("on");
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove("on"), 3400);
 }
 
 // ---- landing ---------------------------------------------------------
 $("#btn-open").onclick = async () => {
   $("#btn-open").disabled = true;
   try {
-    const r = await fetch("/api/create", { method: "POST" });
-    const { code } = await r.json();
-    showWaiting(code);
-    connect(code);
-  } catch (e) {
-    $("#btn-open").disabled = false;
-    toast("The district office did not answer. Try again.");
-  }
+    const { code } = await (await fetch("/api/create", { method: "POST" })).json();
+    showWaiting(code); connect(code);
+  } catch { $("#btn-open").disabled = false; toast("The district office did not answer. Try again."); }
 };
-
 $("#btn-join").onclick = () => {
-  $("#pick").classList.add("hidden");
-  $("#joining").classList.remove("hidden");
-  $("#codebox input").focus();
+  $("#pick").classList.add("hidden"); $("#joining").classList.remove("hidden");
+  document.querySelector("#codebox input").focus();
 };
-
 const boxes = [...document.querySelectorAll("#codebox input")];
 boxes.forEach((b, i) => {
   b.addEventListener("input", () => {
     b.value = b.value.toUpperCase().replace(/[^A-Z]/g, "");
     if (b.value && i < 3) boxes[i + 1].focus();
   });
-  b.addEventListener("keydown", (e) => {
-    if (e.key === "Backspace" && !b.value && i > 0) boxes[i - 1].focus();
-  });
+  b.addEventListener("keydown", (e) => { if (e.key === "Backspace" && !b.value && i > 0) boxes[i - 1].focus(); });
   b.addEventListener("paste", (e) => {
     const txt = (e.clipboardData.getData("text") || "").toUpperCase().replace(/[^A-Z]/g, "");
     if (txt.length >= 4) { e.preventDefault(); boxes.forEach((x, j) => x.value = txt[j] || ""); boxes[3].focus(); }
   });
 });
-
 $("#btn-enter").onclick = () => {
   const code = boxes.map((b) => b.value).join("");
   if (code.length !== 4) return toast("Four letters, please.");
-  showWaiting(code);
-  connect(code);
+  showWaiting(code); connect(code);
 };
-
 $("#btn-copy").onclick = async () => {
   const link = location.origin + "/?room=" + room;
-  try { await navigator.clipboard.writeText(link); toast("Invite link copied."); }
-  catch { toast(link); }
+  try { await navigator.clipboard.writeText(link); toast("Invite link copied."); } catch { toast(link); }
 };
-
 function showWaiting(code) {
   room = code;
-  $("#pick").classList.add("hidden");
-  $("#joining").classList.add("hidden");
-  $("#waiting").classList.remove("hidden");
-  $("#code-out").textContent = code;
+  $("#pick").classList.add("hidden"); $("#joining").classList.add("hidden");
+  $("#waiting").classList.remove("hidden"); $("#code-out").textContent = code;
 }
 
 // ---- socket ----------------------------------------------------------
@@ -265,121 +307,244 @@ function connect(code) {
   seatToken = localStorage.getItem("bb:seat:" + code);
   const proto = location.protocol === "https:" ? "wss:" : "ws:";
   ws = new WebSocket(`${proto}//${location.host}/api/ws?room=${code}`);
-
-  ws.onopen = () => {
-    setWire(true);
-    ws.send(JSON.stringify({ t: "hello", v: 1, resumeToken: seatToken || undefined }));
-  };
+  ws.onopen = () => { setWire(true); ws.send(JSON.stringify({ t: "hello", v: 1, resumeToken: seatToken || undefined })); };
   ws.onclose = () => { setWire(false); setTimeout(() => connect(code), 1500); };
   ws.onerror = () => setWire(false);
   ws.onmessage = (ev) => {
     const m = JSON.parse(ev.data);
     if (m.t === "hello_ack") {
       seatToken = m.seatToken;
-      localStorage.setItem("bb:seat:" + code, seatToken);
-      myBox = m.boxId;
+      try { localStorage.setItem("bb:seat:" + code, seatToken); } catch {}
       $("#code-chip").textContent = m.roomCode;
-      // no seat yet: the snapshot will offer the free boxes
     } else if (m.t === "snapshot") {
-      // desync story, entire: render only if this is newer than what we drew
-      if (m.seq <= lastSeq) return;
-      lastSeq = m.seq;
-      render(m);
-    } else if (m.t === "toast") {
-      toast(m.text);
-    }
+      if (m.seq <= lastSeq) return;      // the entire desync story
+      lastSeq = m.seq; S = m; render(m);
+    } else if (m.t === "toast") toast(m.text);
   };
 }
-
 function setWire(ok) {
   const w = $("#wire");
   w.textContent = ok ? "● wire good" : "● wire down";
   w.className = ok ? "wire-ok" : "wire-bad";
 }
+const act = (action, args) => ws && ws.send(JSON.stringify({ t: "act", action, args }));
 
 // ---- render ----------------------------------------------------------
 function render(s) {
-  if (s.you && s.you.boxId) {
-    myBox = s.you.boxId;
-    $("#landing").style.display = "none";
-    $("#game").style.display = "flex";
-  } else {
-    // still seat-less: offer the free boxes on the landing screen
-    renderSeatOffer(s);
-    return;
-  }
+  if (!s.you || !s.you.boxId) { renderSeatOffer(s); return; }
+  $("#landing").style.display = "none";
+  $("#game").style.display = "flex";
 
-  $("#clock").textContent = s.clock;
+  $("#clock").textContent = s.clock || "";
   $("#code-chip").textContent = s.code;
+  $("#delay").textContent = (s.phase === "SHIFT" || s.phase === "REPORT") && s.delay != null
+    ? (s.delay > 0 ? `+${s.delay} late` : "on time") : "";
 
   const rb = $("#ribbon");
   rb.textContent = s.ribbon || "";
   rb.classList.toggle("waiting", !!s.paused);
 
-  if (s.section) {
-    $("#far-name").textContent = s.section.to;
-    $("#far-miles").textContent = s.section.miles + " MILES";
+  if (s.phase === "REPORT" && s.report) { renderReport(s); return; }
+  document.querySelector(".board").classList.remove("hidden");
+  document.querySelector(".tabs").classList.remove("hidden");
+  renderBoard(s);
+  renderSheet(s);
+}
+
+/** The Notice of Delay — the thing people screenshot. */
+function renderReport(s) {
+  const r = s.report;
+  document.querySelector(".board").classList.add("hidden");
+  document.querySelector(".tabs").classList.add("hidden");
+  const host = $("#sheet"); host.textContent = "";
+
+  const n = el("div", "notice");
+  n.append(el("h2", null, "Notice of Delay"));
+  n.append(el("div", "where", `${r.line} · ${r.from}–${r.to} · ${r.boxes.join(" & ")}`));
+
+  const tb = el("table");
+  for (const row of r.rows) {
+    const tr = el("tr");
+    tr.append(el("td", null, `${row.headcode} ${row.name}`));
+    tr.append(el("td", null, `${row.booked} → ${row.actual}`));
+    const td = el("td", "late" + (row.late > 0 ? " bad" : ""), row.late > 0 ? `+${row.late}` : "—");
+    tr.append(td);
+    tb.append(tr);
+  }
+  n.append(tb);
+
+  const tot = el("div", "tot");
+  tot.append(el("span", null, `${r.total} MINUTES LOST AGAINST THE BOOK`));
+  tot.append(el("span", "grade", r.grade.letter));
+  n.append(tot);
+  n.append(el("div", "verdict", r.grade.line));
+
+  if (r.quote) {
+    const q = el("blockquote", null, "“" + r.quote.text + "”");
+    q.append(el("cite", null, `${r.quote.from}, ${r.quote.kind === "card" ? "reading from the book" : "on the wire"}`));
+    n.append(q);
+  }
+  host.append(n);
+
+  const again = el("button", "btn", "ANOTHER NIGHT");
+  again.append(el("span", "sub2", "A fresh shift on the same branch."));
+  again.onclick = () => location.reload();
+  host.append(again);
+}
+
+function renderBoard(s) {
+  const sec = s.sections ? s.sections.find((x) => x.mine) : s.section;
+  if (sec) {
+    $("#far-name").textContent = sec.to;
+    $("#far-miles").textContent = sec.miles + " MILES";
     const lt = $("#lamptext");
-    const glyph = s.section.lamp === "OCCUPIED" ? "▤ OCCUPIED"
-                : s.section.lamp === "GIVEN"    ? "▥ LINE CLEAR GIVEN"
-                : "▣ CLEAR";
-    lt.textContent = glyph;
-    lt.className = "lamptext lamp-" + s.section.lamp;
+    const lamp = sec.lamp || "CLEAR";
+    lt.textContent = lamp === "OCCUPIED" ? `▤ OCCUPIED — ${sec.occupiedBy || "a train is in the section"}`
+                   : lamp === "GIVEN" ? "▥ LINE CLEAR GIVEN"
+                   : "▣ CLEAR";
+    lt.className = "lamptext lamp-" + lamp;
 
     const c = $("#corridor"); c.textContent = "";
-    for (let m = s.section.miles; m >= 0; m--) {
+    for (let m = sec.miles; m >= 0; m--) {
       const row = el("div", "mile" + (m === 0 ? " here" : ""));
       row.append(el("span", "n", String(m)));
       if (m === 0) row.append(el("span", null, "── YOUR BOX ──"));
-      else if (m === 4 && s.section.occupied) row.append(el("span", null, "12 LIGHT ENGINE ↑"));
+      else if (m === Math.ceil(sec.miles / 2) && (sec.occupied || sec.occupiedBy))
+        row.append(el("span", "occ", (sec.occupiedBy || "a train") + " ↕"));
       c.append(row);
     }
   }
 
-  const roads = $("#roads"); roads.textContent = "";
-  if (s.trains.length === 0) {
-    const r = el("div", "road");
-    r.append(el("span", "label", "YOUR ROADS"));
-    r.append(el("span", "val", "empty"));
-    roads.append(r);
-  }
-  for (const t of s.trains) {
-    const r = el("div", "road train");
-    r.append(el("span", "label", t.disposal ? "TO THE " + t.disposal : "AT YOUR BOX"));
-    r.append(el("span", "val", t.label));
-    roads.append(r);
-  }
-
-  const acts = $("#actions"); acts.textContent = "";
-  for (const a of s.legalActions) {
-    const b = el("button", "btn", a.label);
-    b.onclick = () => ws.send(JSON.stringify({ t: "act", action: a.action, args: a.args }));
-    acts.append(b);
-    if (a.hint) acts.append(el("p", "hint", a.hint));
-  }
-
-  const reg = $("#register"); reg.textContent = "";
-  for (const line of s.register) {
-    if (line.kind === "note") reg.append(el("div", "note", line.text));
-    else {
-      const d = el("div", "say");
-      const b = el("b", null, line.from + ": ");
-      d.append(b); d.append(document.createTextNode(line.text));
-      reg.append(d);
+  // your own roads, as they actually are
+  const rl = $("#roadline"); rl.textContent = "";
+  if (s.box && s.roads) {
+    const bits = [];
+    bits.push(["PLATFORM", s.roads.platform ? "occupied" : "clear"]);
+    if (s.box.loops.length) {
+      for (const l of s.box.loops) {
+        const live = s.roads.loops.find((x) => x.id === l.id);
+        bits.push([`LOOP ${l.id} ${l.maxWagons}w`, live && live.occupiedBy ? "occupied" : "clear"]);
+      }
+    } else bits.push(["LOOP", "none"]);
+    bits.push(["YARD", `${s.roads.yardUsed}/${s.box.yardPrinted}`]);
+    const fac = Object.entries(s.box.facilities).filter(([, v]) => v).map(([k]) => k);
+    bits.push(["", fac.length ? fac.join(" · ") : "no facilities"]);
+    for (const [k, v] of bits) {
+      const sp = el("span", null, null);
+      if (k) { sp.append(document.createTextNode(k + " ")); sp.append(el("b", null, v)); }
+      else sp.append(el("b", null, v));
+      rl.append(sp);
     }
   }
-  $("#sheet").scrollTop = $("#sheet").scrollHeight;
+
+  // trains standing at YOUR box
+  const host = $("#trains"); host.textContent = "";
+  const legal = s.legalActions || [];
+  const list = s.trains || [];
+  if (!list.length) {
+    host.append(el("div", "empty", s.phase === "SHIFT"
+      ? "Nothing standing at your box this minute." : ""));
+  }
+  for (const t of list) {
+    const acts = legal.filter((a) => a.trainId === t.id);
+    const b = el("button", "train" + (acts.length ? " actionable" : ""));
+    const left = el("div");
+    left.append(el("div", "id", `${t.glyph || ""} ${t.headcode || ""} ${t.name || t.label || ""}`.trim()));
+    if (t.className) left.append(el("div", "meta",
+      `${t.wagons}w ${t.className} · booked ${t.booked} · for the ${t.disposal}` +
+      (t.facilityNeed && t.facilityNeed !== "none" && !t.serviced ? ` · wants ${t.facilityNeed.toLowerCase()}` : "")));
+    if (t.vignette) left.append(el("div", "vig", "“" + t.vignette + "”"));
+    b.append(left);
+    b.append(el("span", "chev", acts.length ? "›" : ""));
+    b.onclick = () => openSheet(t, acts);
+    host.append(b);
+  }
+
+  // actions with no train of their own (give / hold / send / begin)
+  const loose = legal.filter((a) => !list.some((t) => t.id === a.trainId));
+  for (const a of loose) {
+    const b = el("button", "btn" + (a.danger ? " danger" : ""), a.label);
+    if (a.train || a.hint) b.append(el("span", "sub2", [a.train, a.hint].filter(Boolean).join(" — ")));
+    b.onclick = () => act(a.action, { ...(a.args || {}), trainId: a.trainId });
+    host.append(b);
+  }
+
+  if (s.phase === "READY") {
+    const b = el("button", "btn", "I HAVE THE DUTY");
+    b.append(el("span", "sub2", "Book on and the night's workings begin."));
+    b.onclick = () => ws.send(JSON.stringify({ t: "begin" }));
+    host.append(b);
+  }
+}
+
+function openSheet(t, acts) {
+  if (!acts.length) return;
+  $("#m-title").textContent = `${t.headcode || ""} ${t.name || ""}`.trim();
+  $("#m-sub").textContent = t.className
+    ? `${t.wagons} wagons · booked ${t.booked} · for the ${t.disposal}` : "";
+  const host = $("#m-actions"); host.textContent = "";
+  for (const a of acts) {
+    const b = el("button", "btn" + (a.danger ? " danger" : ""), a.label + (a.booked ? "  ✓ as booked" : ""));
+    if (a.hint) b.append(el("span", "sub2", a.hint));
+    b.onclick = () => { closeSheet(); act(a.action, { ...(a.args || {}), trainId: a.trainId }); };
+    host.append(b);
+  }
+  $("#modal").classList.add("on");
+}
+const closeSheet = () => $("#modal").classList.remove("on");
+$("#m-close").onclick = closeSheet;
+$("#modal").onclick = (e) => { if (e.target.id === "modal") closeSheet(); };
+
+function renderSheet(s) {
+  const host = $("#sheet"); host.textContent = "";
+  const badge = $("#book-badge");
+  const book = s.book || [];
+  const unposted = book.filter((c) => !c.posted).length;
+  badge.textContent = String(unposted);
+  badge.classList.toggle("hidden", unposted === 0);
+
+  if (tab === "book") {
+    if (!book.length) { host.append(el("div", "empty", "Your book is empty so far. The district office will wire.")); return; }
+    for (const c of book) {
+      const d = el("div", "card" + (c.posted ? " posted" : ""));
+      d.append(el("span", "k", c.kind === "ORDER" ? "WORKING ORDER" : "NOTICE"));
+      d.append(document.createTextNode(c.text));
+      if (c.posted) d.append(el("div", "sent", "SENT VERBATIM"));
+      else {
+        const b = el("button", null, "SEND VERBATIM");
+        b.onclick = () => ws.send(JSON.stringify({ t: "send_fact", factId: c.id }));
+        d.append(b);
+      }
+      host.append(d);
+    }
+    return;
+  }
+
+  if (tab === "wire" || tab === "board") {
+    const reg = el("div", "reg");
+    for (const line of (s.register || [])) {
+      if (line.kind === "note") reg.append(el("div", "note", line.text));
+      else if (line.kind === "card") {
+        const d = el("div", "card2");
+        d.append(el("b", null, `${line.from} READS FROM THE BOOK`));
+        d.append(document.createTextNode(line.text));
+        reg.append(d);
+      } else {
+        const d = el("div", "say");
+        d.append(el("b", null, line.from + ": "));
+        d.append(document.createTextNode(line.text));
+        reg.append(d);
+      }
+    }
+    host.append(reg);
+    host.scrollTop = host.scrollHeight;
+  }
 }
 
 function renderSeatOffer(s) {
-  const free = s.boxes.filter((b) => !b.manned);
-  $("#manned").textContent = `${s.boxes.filter((b) => b.manned).length} of ${s.boxes.length} signallers on duty.`;
-  let host = $("#seat-offer");
-  if (!host) {
-    host = el("div"); host.id = "seat-offer";
-    $("#waiting").append(host);
-  }
-  host.textContent = "";
+  const free = (s.boxes || []).filter((b) => !b.manned);
+  $("#manned").textContent = `${(s.boxes || []).filter((b) => b.manned).length} of ${(s.boxes || []).length} signallers on duty.`;
+  const host = $("#seat-offer"); host.textContent = "";
   for (const b of free) {
     const btn = el("button", "btn", "TAKE " + b.name);
     btn.onclick = () => ws.send(JSON.stringify({ t: "claim_seat", boxId: b.id, name: "Signaller" }));
@@ -387,24 +552,23 @@ function renderSeatOffer(s) {
   }
 }
 
-// ---- say -------------------------------------------------------------
+// ---- say / tabs ------------------------------------------------------
 function sendSay() {
-  const i = $("#say");
-  const text = i.value.trim();
+  const i = $("#say"); const text = i.value.trim();
   if (!text || !ws) return;
-  ws.send(JSON.stringify({ t: "say", text }));
-  i.value = "";
+  ws.send(JSON.stringify({ t: "say", text })); i.value = "";
 }
 $("#btn-say").onclick = sendSay;
 $("#say").addEventListener("keydown", (e) => { if (e.key === "Enter") sendSay(); });
 
 document.querySelectorAll(".tabs button").forEach((b) => {
   b.onclick = () => {
+    tab = b.dataset.tab;
     document.querySelectorAll(".tabs button").forEach((x) => x.setAttribute("aria-selected", String(x === b)));
+    if (S) renderSheet(S);
   };
 });
 
-// ---- deep link -------------------------------------------------------
 const qs = new URLSearchParams(location.search);
 const deep = (qs.get("room") || "").toUpperCase();
 if (/^[A-Z]{4}$/.test(deep)) { showWaiting(deep); connect(deep); }

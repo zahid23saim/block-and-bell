@@ -174,6 +174,15 @@ export function drawTrains(rng, n, line) {
   const classes = TABLES.identities.classes;
   const last = line.boxes.length - 1;
 
+  // BALANCE THE ENDS. Independent coin flips let every train start from the
+  // same box, which leaves the other signaller holding no working orders at
+  // all — a decorative seat, with nothing to tell anyone. Splitting the
+  // directions evenly also means trains meet head-on, which is the only
+  // reason a single line needs two people in the first place.
+  const dirs = rng.shuffle(
+    Array.from({ length: n }, (_, i) => i < Math.ceil(n / 2))
+  );
+
   // SOLUTION FIRST, applied at the draw: we never book a train somewhere it
   // cannot physically be put. A shed disposal at a box with no shed is not a
   // hard puzzle, it is an impossible one, and it wedges the whole shift.
@@ -189,7 +198,7 @@ export function drawTrains(rng, n, line) {
     const wagons = cls.id === "LIGHT_ENGINE" ? 0 : rng.pick(cls.typicalWagons);
 
     // northbound from the south end, or southbound from the north end
-    const northbound = rng.chance(0.5);
+    const northbound = dirs[i];
     const origin = northbound ? 0 : last;
 
     // a train either terminates at a box up the line, or runs THROUGH

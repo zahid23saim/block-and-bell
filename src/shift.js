@@ -7,7 +7,7 @@
  * return a fact the asking box is not entitled to.
  */
 
-import { generateShift, TURN } from "./generator.js";
+import { generateShift, simulate, TURN } from "./generator.js";
 import { buildFacts, applyTraps, NEUTRAL_PRIORITY } from "./traps.js";
 import { TABLES } from "./content.js";
 import { fnv1a32, mulberry32 } from "./generator.js";
@@ -48,7 +48,10 @@ function substitute(s, v) {
     .replace(/\{TIME\}/g, v.time ?? "the booked time")
     .replace(/\{TRAIN\}/g, v.train ? `${v.train.headcode} ${v.train.name}` : "that working")
     .replace(/\{CLASS\}/g, v.train ? v.train.className.toLowerCase() : "goods")
-    .replace(/\{WAGONS\}/g, String(v.wagons ?? 0))
+    // "{WAGONS} of ballast" must read "5 wagons of ballast", while
+    // "blocked by {WAGONS} wagons" must not read "5 wagons wagons".
+    .replace(/\{WAGONS\} wagons/g, `${v.wagons ?? 0} wagons`)
+    .replace(/\{WAGONS\}/g, `${v.wagons ?? 0} wagons`)
     .replace(/\{LOOP\}/g, v.loop ?? "the loop")
     .replace(/\{MILES\}/g, String(v.miles ?? 7) + " miles")
     .replace(/\{SECTION\}/g, v.section ?? "the section");
@@ -61,22 +64,33 @@ function substitute(s, v) {
  * in a game whose whole subject is reading a notice carefully.
  */
 const ARCHETYPE_FITS = [
-  [/post office|mails/i, ["MAIL"]],
-  [/boat train/i, ["EXPRESS_PASSENGER"]],
-  [/fish/i, ["EXPRESS_FREIGHT"]],
-  [/milk/i, ["MILK"]],
-  [/breakdown/i, ["LIGHT_ENGINE"]],
-  [/cattle/i, ["EXPRESS_FREIGHT"]],
-  [/empty stock/i, ["COAL_EMPTIES"]],
-  [/passenger|relief crew/i, ["EXPRESS_PASSENGER", "STOPPING_PASSENGER"]],
+  // cargo named in the notice -> the WORKING it may describe. Matching on
+  // class alone called a meat train "fish for the early market", because
+  // meat and fish are both express freight.
+  [/fish/i, { names: ["FISH"] }],
+  [/cattle/i, { names: ["CATTLE"] }],
+  [/milk/i, { names: ["MILK"] }],
+  [/post office|the mails/i, { names: ["NIGHT MAIL", "PAPERS"] }],
+  [/boat train/i, { names: ["THE BOAT"] }],
+  [/breakdown/i, { names: ["BREAKDOWN VAN"] }],
+  [/empty stock/i, { names: ["EMPTIES", "THE SLOW GOODS"] }],
+  [/take on the mails/i, { names: ["NIGHT MAIL", "PAPERS"] }],
+  [/relief crew/i, { names: ["THE RELIEF"] }],
+  [/passengers off/i, { classes: ["EXPRESS_PASSENGER", "STOPPING_PASSENGER"] }],
 ];
 
-function archetypesFor(classId) {
+function archetypesFor(train) {
   const all = TABLES.orders.priorityArchetypes;
   const fits = all.filter((a) => {
     const rule = ARCHETYPE_FITS.find(([re]) => re.test(a.template));
-    return !rule || rule[1].includes(classId);
+    if (!rule) return true;                       // generic, fits anything
+    if (!train) return false;
+    const spec = rule[1];
+    if (spec.names) return spec.names.includes(train.name);
+    if (spec.classes) return spec.classes.includes(train.classId);
+    return false;
   });
+  // fall back to the one archetype written to take any class at all
   return fits.length ? fits : all.filter((a) => /\{CLASS\}/.test(a.template));
 }
 
@@ -118,7 +132,7 @@ export function renderFact(fact, shift) {
   if (fact.trap === "T2")
     return sub(`Yard at {BOX} will not hold more than ${fact.params.actualCapacity} wagons tonight. Board is wrong.`);
   if (fact.trap === "T3") return sub(`Loop {LOOP} at {BOX} is out of use. Do not book anything into it.`);
-  if (fact.trap === "T5") return sub(pick(archetypesFor(train?.classId)).template);
+  if (fact.trap === "T5") return sub(pick(archetypesFor(train)).template);
   if (fact.trap === "T7") return sub(`{TRAIN} is running ${fact.params.minutes} minutes late.`);
   if (fact.trap === "T8")
     return sub(`{TRAIN} is ${fact.params.wagons} wagons. Longer than it looks on the book.`);
@@ -154,8 +168,30 @@ export function newShift(roomCode, turnNo, boxCount) {
     }
   }
 
+  // What a pair who told each other everything would have lost. One greedy
+  // run under perfect knowledge — cheap enough to compute inside a Worker,
+  // and an honest benchmark to print on the Notice.
+  let par = null;
+  try {
+    const byBooked = world.trains.slice()
+      .sort((a, b) => (a.bookedMinute ?? 0) - (b.bookedMinute ?? 0)).map((t) => t.id);
+    const allIds = world.trains.map((t) => t.id);
+    const tries = [
+      { policy: "greedy" },
+      { policy: "greedy", hold: allIds },
+      { policy: "order", order: byBooked, hold: allIds },
+      { policy: "order", order: byBooked },
+    ];
+    for (const o of tries) {
+      const r = simulate(world.line, world.trains, o);
+      if (r.ok && (par == null || r.totalDelay < par)) par = r.totalDelay;
+    }
+  } catch { /* the Notice simply omits par */ }
+  if (par == null) par = 0;
+
   return {
     turnNo,
+    par,
     startMinutes: base.startMinutes,
     startClock: base.startClock,
     window: base.config.window,
@@ -303,5 +339,66 @@ export function sliceFor(sh, boxIdx) {
         posted: !!f.posted,
       })),
     delay: sh.delay,
+  };
+}
+
+// ---------------------------------------------------------------- the Notice
+
+/**
+ * Graded against THE BOOK, not against a computed par.
+ *
+ * The book is certified achievable — every printed time came out of a solution
+ * the generator actually ran — so "minutes lost against the book" is a number
+ * that means something. A par from a cheap heuristic was not: it ranged from 0
+ * to 197 on the same difficulty, and printing it would have been dressing a
+ * guess up as a standard. Bands scale with the size of the night.
+ */
+const GRADE = (total, trains) => {
+  const n = Math.max(1, trains);
+  if (total <= 2 * n) return { letter: "A", line: "A clean night. The district office has no remarks." };
+  if (total <= 5 * n) return { letter: "B", line: "A good night, give or take a few minutes nobody will miss." };
+  if (total <= 10 * n) return { letter: "C", line: "Workable. The delay was talked about at the far end." };
+  return { letter: "D", line: "A bad night. Somebody will be asked to explain it." };
+};
+
+/**
+ * NOTICE OF DELAY — the thing people screenshot.
+ *
+ * It prints what was booked against what happened, and then quotes the pair's
+ * own worst sentence back at them, timestamped. Nothing here is invented: the
+ * quote is a line one of them actually typed, chosen as the last thing said
+ * before the train that lost the most time.
+ */
+export function buildReport(sh, register, boxNames) {
+  const rows = sh.trains.map((t) => {
+    const actual = t.doneAt != null ? sh.startMinutes + t.doneAt : null;
+    const booked = t.bookedMinute != null ? sh.startMinutes + t.bookedMinute : null;
+    const late = actual != null && booked != null ? Math.max(0, actual - booked) : 0;
+    return {
+      id: t.id, headcode: t.headcode, name: t.name, className: t.className,
+      booked: booked != null ? hhmm(booked) : "—",
+      actual: actual != null ? hhmm(actual) : "not away",
+      late, placedOn: t.placedOn,
+    };
+  });
+
+  const total = rows.reduce((a, r) => a + r.late, 0);
+  const worst = rows.slice().sort((a, b) => b.late - a.late)[0];
+
+  // the last thing anybody actually said, before the worst train was dealt with
+  const said = (register || []).filter((r) => r.kind === "say" || r.kind === "card");
+  const quote = said.length ? said[said.length - 1] : null;
+
+  return {
+    line: sh.lineName,
+    from: hhmm(sh.startMinutes),
+    to: hhmm(sh.startMinutes + sh.clockMin),
+    boxes: boxNames,
+    rows,
+    total,
+    grade: GRADE(total, rows.length),
+    worst: worst && worst.late > 0 ? worst : null,
+    quote: quote ? { from: quote.from, text: quote.text, kind: quote.kind } : null,
+    allAway: sh.trains.every((t) => t.state === "DONE"),
   };
 }
