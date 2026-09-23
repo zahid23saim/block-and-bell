@@ -408,14 +408,14 @@ export class Room {
   }
 
   ribbon(state, boxId) {
+    // a finished shift is not waiting for anybody, whoever has gone home
+    if (state.phase === "REPORT") return "The shift is over.";
     if (state.paused) {
       const gone = state.boxes.find((b) => b.seat && !this.isManned(state, b.id));
       return gone ? `WAITING FOR ${gone.name.split(" ")[0]}` : "WAITING";
     }
     if (state.phase === "READY")
       return "The light engine is away. That was the whole job — and you did it to each other.";
-    if (state.phase === "REPORT") return "The shift is over.";
-
     if (state.phase === "SHIFT") {
       const idx = state.boxes.findIndex((b) => b.id === boxId);
       // Somebody watching without a seat has no box, so idx is -1. Everything
