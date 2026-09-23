@@ -275,6 +275,7 @@ export class Room {
     const slice = sliceFor(state.shift, idx);
     const card = slice.book.find((c) => c.id === fact.id);
     fact.posted = true;
+    fact.postedAt = state.shift.clockMin;   // the Notice needs the minute, not the fact
     state.register.push({
       kind: "card", from: box.player || box.name, boxId: box.id,
       text: card ? card.text : "(card)",

@@ -454,6 +454,67 @@ export function buildReport(sh, register, players) {
   });
 
   const total = rows.reduce((a, r) => a + r.late, 0);
+
+  /**
+   * THE RECEIPT and THE SHIFT YOU DIDN'T HAVE.
+   *
+   * Built from what is exactly knowable - when a card appeared, when it
+   * reached the wire, and which workings lost time while their notice sat
+   * unread - and NOT from a simulated optimum. A "par" computed from cheap
+   * heuristics ranged from 0 to 377 minutes on the same difficulty here, so
+   * printing "a perfect pair would have lost N" would have been a guess
+   * dressed as a verdict, and a real pair would routinely have beaten it.
+   */
+  const governs = (f, t) => {
+    if (f.trap === "ORDER" || f.trap === "DECOY") return false;
+    if (f.params?.trainId === t.id) return true;
+    // a road or facility notice governs whatever was booked into that box
+    const box = t.dest === "THROUGH" ? null : t.dest;
+    return f.params?.boxIdx != null && box != null && f.params.boxIdx === box;
+  };
+
+  const lateRows = rows.filter((r) => r.late > 0);
+  const attributed = lateRows.map((r) => {
+    const t = sh.trains.find((x) => x.id === r.id);
+    const cards = sh.facts.filter((f) => governs(f, t));
+    const inTime = cards.filter((f) => f.posted && (f.postedAt ?? 0) <= (t.doneAt ?? 0));
+    const silent = cards.filter((f) => !f.posted);
+    return {
+      ...r,
+      cards: cards.length,
+      toldInTime: inTime.length,
+      neverSaid: silent.length,
+      // A train with no notice against it did not lose time to a silence; it
+      // queued behind the rest of the night. Saying "nothing governed it"
+      // reads as a shrug when the honest answer is "that was the railway".
+      why: cards.length === 0 ? "Held behind the rest of the night. Nobody's fault."
+        : silent.length && !inTime.length ? "The notice that governed it was never read out."
+        : inTime.length ? "You had been told, and it still ran late."
+        : "The notice reached the wire after it mattered.",
+    };
+  }).sort((a, b) => b.late - a.late);
+
+  // minutes lost on workings whose governing notice never reached the wire
+  const silentMinutes = attributed
+    .filter((r) => r.neverSaid && !r.toldInTime)
+    .reduce((a, r) => a + r.late, 0);
+
+  // the card held longest that mattered
+  const heldReceipts = sh.facts
+    .filter((f) => f.trap !== "ORDER" && f.trap !== "DECOY")
+    .map((f) => {
+      const appeared = f.knownFrom ?? 0;
+      const said = f.posted ? (f.postedAt ?? sh.clockMin) : null;
+      return {
+        box: boxNames[f.heldBy] ?? sh.line.boxes[f.heldBy]?.name,
+        text: f.text ?? renderFact(f, sh),
+        appeared: hhmm(sh.startMinutes + appeared),
+        said: said == null ? null : hhmm(sh.startMinutes + said),
+        heldFor: (said == null ? sh.clockMin : said) - appeared,
+      };
+    })
+    .sort((a, b) => b.heldFor - a.heldFor);
+  const receipt = heldReceipts.length ? heldReceipts[0] : null;
   const worst = rows.slice().sort((a, b) => b.late - a.late)[0];
 
   // the last thing anybody actually said
@@ -489,6 +550,9 @@ export function buildReport(sh, register, players) {
     worst: worst && worst.late > 0 ? worst : null,
     held,
     heldCount: held.length,
+    attributed,
+    silentMinutes,
+    receipt,
     quote: quote ? { from: quote.from, text: quote.text, kind: quote.kind } : null,
     allAway: sh.trains.every((t) => t.state === "DONE"),
   };

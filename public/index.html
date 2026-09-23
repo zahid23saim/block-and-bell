@@ -149,6 +149,14 @@ h1{font-family:var(--mono);font-weight:600;letter-spacing:.06em;font-size:30px;m
   font-family:var(--mono);font-size:13px}
 .notice .grade{font-family:var(--slab);font-size:40px;line-height:1;font-weight:600}
 .notice .verdict{font-family:var(--slab);font-size:15px;margin-top:6px}
+.notice .block{margin-top:16px;border-top:1px solid #d5c9ae;padding-top:12px}
+.notice .block h4{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;
+  color:#6b6357;margin:0 0 8px;font-weight:400}
+.notice .block p{margin:0 0 6px;font-family:var(--slab);font-size:14.5px;line-height:1.4}
+.notice .att{display:flex;gap:10px;font-family:var(--slab);font-size:14px;margin-bottom:5px}
+.notice .att b{font-family:var(--mono);font-size:13px;color:#9c2b22;min-width:3.4em;text-align:right}
+.notice .counter{background:#e2d6bc;padding:11px 12px;margin-top:10px;
+  font-family:var(--slab);font-size:15px;line-height:1.45}
 .notice .held{margin-top:16px;border-top:1px solid #d5c9ae;padding-top:12px}
 .notice .held h4{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;
   color:#9c2b22;margin:0 0 8px;font-weight:400}
@@ -561,7 +569,8 @@ async function saveNotice(r) {
   const c = document.createElement("canvas");
   const ctx = c.getContext("2d");
   const held = (r.held || []).slice(0, 5);
-  const H = 640 + r.rows.length * 46 + (held.length ? 90 + held.length * 62 : 0);
+  const H = 640 + r.rows.length * 46 + (held.length ? 90 + held.length * 62 : 0)
+            + (r.silentMinutes > 0 ? 150 : 0);
   c.width = W; c.height = H;
 
   const ink = "#1C1A17", dim = "#6B6357", rule = "#D5C9AE", red = "#9C2B22";
@@ -601,6 +610,17 @@ async function saveNotice(r) {
   y += 52;
   ctx.font = "600 30px 'Zilla Slab', Georgia, serif";
   ctx.fillText(r.grade.line, PAD, y);
+
+  if (r.silentMinutes > 0) {
+    y += 64;
+    ctx.fillStyle = dim; ctx.font = "20px 'IBM Plex Mono', monospace";
+    ctx.fillText("THE SHIFT YOU DIDN'T HAVE", PAD, y);
+    y += 40;
+    ctx.fillStyle = ink; ctx.font = "600 27px 'Zilla Slab', Georgia, serif";
+    ctx.fillText(`${r.silentMinutes} of those ${r.total} minutes were on workings whose`, PAD, y);
+    ctx.fillText("notice was sitting in somebody's book, unread.", PAD, y + 36);
+    y += 40;
+  }
 
   if (held.length) {
     y += 76;
@@ -663,6 +683,52 @@ function renderReport(s) {
   tot.append(el("span", "grade", r.grade.letter));
   n.append(tot);
   n.append(el("div", "verdict", r.grade.line));
+
+  // ATTRIBUTED — where the minutes actually went
+  if ((r.attributed || []).length) {
+    const a = el("div", "block");
+    a.append(el("h4", null, "ATTRIBUTED"));
+    for (const row of r.attributed.slice(0, 5)) {
+      const line = el("div", "att");
+      line.append(el("b", null, "+" + row.late));
+      const txt = el("span", null, `${row.headcode} ${row.name} — ${row.why}`);
+      line.append(txt);
+      a.append(line);
+    }
+    n.append(a);
+  }
+
+  // THE RECEIPT — one card, when it appeared, when it was said
+  if (r.receipt && r.receipt.heldFor > 0) {
+    const b = el("div", "block");
+    b.append(el("h4", null, "THE RECEIPT"));
+    b.append(el("p", null, `“${r.receipt.text}”`));
+    b.append(el("p", null,
+      r.receipt.said
+        ? `${r.receipt.box} had it at ${r.receipt.appeared}. It reached the wire at ${r.receipt.said}. Held ${r.receipt.heldFor} minutes.`
+        : `${r.receipt.box} had it at ${r.receipt.appeared} and never read it out. Held ${r.receipt.heldFor} minutes.`));
+    n.append(b);
+  }
+
+  // THE SHIFT YOU DIDN'T HAVE
+  {
+    const c = el("div", "block");
+    c.append(el("h4", null, "THE SHIFT YOU DIDN'T HAVE"));
+    const p = el("div", "counter");
+    if (r.silentMinutes > 0) {
+      p.textContent =
+        `${r.silentMinutes} of your ${r.total} lost minutes were on workings whose notice ` +
+        `was sitting in somebody's book, unread. Not a harder night — the same night, said out loud.`;
+    } else if (r.total === 0) {
+      p.textContent = "Nothing was lost and nothing was held. That is the shift you had.";
+    } else {
+      p.textContent =
+        `Every working that lost time had been talked about first. The minutes were the railway, ` +
+        `not the silence — which is the best excuse there is.`;
+    }
+    c.append(p);
+    n.append(c);
+  }
 
   if (r.heldCount > 0) {
     const h = el("div", "held");

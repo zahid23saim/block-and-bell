@@ -101,7 +101,6 @@ the quiet stretches actually run.
 The design document is deliberately larger than what shipped, and it is easier to say so than to
 let you find out:
 
-- **The counterfactual** - "the shift you didn't have" - on the Notice.
 - **The rejection tests are not a gate.** The design has the generator reroll a shift that fails
   R1-R5. Here they exist as functions in `src/traps.js` and as measurement in `test/ceiling.mjs`,
   and nothing calls them during generation. A shift is certified *solvable*, not *certified to
@@ -144,6 +143,29 @@ holding that card looks at the ballast train standing on its own platform, files
 and never says it out loud. Its real bite is the one it cannot see. The draw guarantees the pair
 exists - a same-class pair at opposite ends - so from turn two the bait is not a lucky roll. It is
 the direct answer to "I will just paste my whole book at you."
+
+## The Notice of Delay
+
+The night ends on a printed card, and it is the thing people screenshot. It prints what was
+booked against what happened, grades it against the book, and then does three things that are
+about the conversation rather than the timetable:
+
+**ATTRIBUTED** - where the minutes went, working by working, and whether anybody had been told.
+
+**THE RECEIPT** - one card, quoted, with the minute it appeared in somebody's book and the minute
+it reached the wire. *"STOKENCHURCH had it at 22:40, never read out. Held 48 minutes."*
+
+**THE SHIFT YOU DIDN'T HAVE** - how many of the lost minutes sat on workings whose notice was in
+somebody's book, unread. Not a harder night: the same night, said out loud.
+
+**HELD FACTS** - everything that was never said at all, decoys excluded, because holding those
+back was correct.
+
+A note on what this is NOT. The design asks for a counterfactual against par - what a perfect pair
+would have lost. Par here is computed from cheap heuristics and ranges from 0 to 377 minutes on
+the same difficulty, so a real pair would routinely "beat perfect". Printing that would be a guess
+dressed as a verdict. Everything on the Notice is instead computed from what is exactly knowable:
+when a card appeared, when it was said, and which delays sat behind a silence.
 
 ## The bells
 
