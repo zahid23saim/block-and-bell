@@ -319,8 +319,8 @@ export class Room {
     // counts in the old line read as a contradiction to three of them.
     const names = state.boxes.map((b) => b.name);
     this.note(state,
-      `Booking on — ${state.shift.lineName}. The practice was at Dunmere and Hartle; ` +
-      `tonight you are ${names[0]}, your neighbour is ${names.slice(1).join(" and ")}.`);
+      `The practice is over. Tonight you are ${names[0]} and your neighbour is ` +
+      `${names.slice(1).join(" and ")}, on a line called ${state.shift.lineName}.`);
     this.broadcast(state);
     this.ctx.storage.setAlarm(Date.now() + TICK_MS);
   }
@@ -413,7 +413,7 @@ export class Room {
     return legalFor(state.shift, idx, { paused: state.paused });
   }
 
-  ribbon(state, boxId) {
+  ribbon(state, boxId, multiDesk) {
     // a finished shift is not waiting for anybody, whoever has gone home
     if (state.phase === "REPORT") return "The shift is over.";
     if (state.paused) {
@@ -448,14 +448,19 @@ export class Room {
         const where = train
           ? `The ${train.headcode} ${train.name} is in the section`
           : sec.occupiedBy ? "The section is busy"
-          : "Nothing is due this minute";
+          : "Nothing is due for a few minutes — which is what the book is for";
         if (unposted > 0) {
           // every other ribbon ends in an imperative; this one ended in a fact,
           // and it is the exact moment the coaching stops
+          // Working both desks yourself, "read one out to them" asks you to
+          // tell a secret to yourself. Five of five cold readers caught it.
+          const to = multiDesk ? "read one out at the other desk" : "read one out to them";
           return `${where}. ${unposted} thing${unposted === 1 ? "" : "s"} in your book your ` +
-                 `neighbour cannot see — open BOOK and read one out to them.`;
+                 `neighbour cannot see — open BOOK and ${to}.`;
         }
-        return `${where}. Nothing to do but watch it — say something to your neighbour.`;
+        return multiDesk
+          ? `${where}. Nothing to do but watch it.`
+          : `${where}. Nothing to do but watch it — say something to your neighbour.`;
       }
       const first = legal[0];
       return `${first.train} is at your box. ${first.hint ?? "Deal with it."}`;
@@ -484,7 +489,7 @@ export class Room {
 
   // --- per-seat slice -------------------------------------------------
 
-  snapshot(state, boxId) {
+  snapshot(state, boxId, multiDesk) {
     const me = state.boxes.find((b) => b.id === boxId) || null;
     const idx = me ? state.boxes.indexOf(me) : -1;
 
@@ -496,7 +501,7 @@ export class Room {
         id: b.id, name: b.name, manned: this.isManned(state, b.id),
         player: b.player, you: !!me && b.id === me.id,
       })),
-      ribbon: this.ribbon(state, boxId),
+      ribbon: this.ribbon(state, boxId, multiDesk),
       register: state.register.slice(-40),
     };
 
@@ -549,8 +554,8 @@ export class Room {
     for (const ws of this.ctx.getWebSockets()) {
       const att = ws.deserializeAttachment() || {};
       const viewing = att.seatToken ? this.viewBoxOf(state, att) : att.boxId;
-      const snap = this.snapshot(state, viewing);
       const desks = att.seatToken ? this.soloBoxes(state, att) : [];
+      const snap = this.snapshot(state, viewing, desks.length > 1);
       this.send(ws, desks.length > 1 ? { ...snap, desks } : snap);
     }
   }

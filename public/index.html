@@ -221,7 +221,7 @@ h1{font-family:var(--mono);font-weight:600;letter-spacing:.06em;font-size:30px;m
       <h1>BLOCK &amp; BELL</h1>
       <p class="sub">One single track. Two signal boxes. You can only see your own — so say it out loud.</p>
     </div>
-    <p class="fine">Two signal boxes to start; longer lines take up to four. About six minutes a shift.<br>Talk however you like — same room, a phone call, or the message box in the game.<br>On your own, you work both boxes. No app, no account, no name required.</p>
+    <p class="fine">Two signal boxes. About six minutes a shift — the line's clock runs fast.<br>Talk however you like — same room, a phone call, or the message box in the game.<br>On your own you work both boxes — you see both halves, so it is practice. The real game is two people.<br>No app, no account, no name required.</p>
 
     <div id="pick">
       <button class="btn" id="btn-open">OPEN A BOX</button>
@@ -296,18 +296,22 @@ h1{font-family:var(--mono);font-weight:600;letter-spacing:.06em;font-size:30px;m
      so nothing moves unless the far box says it can.</p>
 
   <h4>What you can see</h4>
-  <p>Your own platform, loops, yard and the trains standing at them. Your neighbour's line is a
+  <p>Your own <b>roads</b> — platform, loop, yard, shed — and the trains standing at them. Your neighbour's line is a
      lamp and nothing else. You cannot see their roads, their trains or their book.</p>
 
   <h4>What is in your book</h4>
   <p>Working orders and notices for <b>your neighbour's</b> trains and premises — never your own.
-     Theirs has yours. That is the whole game: read a card, say it out loud, and ask for what you
-     cannot see. Some cards are inert. Some arrive mid-shift.</p>
+     Theirs has yours. Your board prints what was <i>booked</i>; their book says what has
+     <i>changed</i> since. That is the whole game: read a card, say it out loud, and ask for what
+     you cannot see.</p>
+  <p>Some cards change nothing. Read them out anyway — the Notice counts every card you kept to
+     yourself. Some arrive mid-shift.</p>
 
   <h4>Working a train</h4>
   <p><b>ASK LINE CLEAR</b> — offer a train to the far box, naming where it is going.<br>
      <b>GIVE LINE CLEAR</b> — accept it, if you can take it. <b>HOLD THE LINE</b> if you cannot.<br>
      <b>SEND INTO SECTION</b> — once it has been given.<br>
+     <b>TAKE WATER / TAKE COAL</b> — some trains want them first, at a box that has them.<br>
      <b>TO THE PLATFORM / LOOP / YARD / SHED</b> — put an arrived train where its book says.
      If that road will not take it, <b>SHUNT</b> costs minutes and <b>DETACH</b> breaks it up.</p>
   <p class="r-note">A train goes where it is booked or it is shunted. It blocks the section until
@@ -319,9 +323,11 @@ h1{font-family:var(--mono);font-weight:600;letter-spacing:.06em;font-size:30px;m
      Two, pause, one — the section is cleared.<br>
      Telegraph chatter — a new notice has reached your book.<br>
      A wooden knock — that was refused.</p>
+  <p class="r-note">You will not have to remember these — the line above the board always says
+     what just happened.</p>
 
   <h4>How it ends</h4>
-  <p>When every working is away you get a <b>Notice of Delay</b>: what was booked against what
+  <p>When every working — every train on tonight's card — is away, you get a <b>Notice of Delay</b>: what was booked against what
      happened, and every card that was never read out.</p>
 
   <button class="btn ghost" id="rules-close">BACK TO THE BOX</button>
@@ -874,7 +880,7 @@ function renderRest(s) {
     } else bits.push(["LOOP", "none"]);
     bits.push(["YARD", `${s.roads.yardUsed} of ${s.box.yardPrinted} wagons`]);
     const fac = Object.entries(s.box.facilities).filter(([, v]) => v).map(([k]) => k);
-    bits.push(["", fac.length ? fac.join(" · ") + " here" : "no water, coal or shed here"]);
+    bits.push(["", fac.length ? fac.map((f) => f.toLowerCase()).join(" · ") + " at this box" : "no water, coal or shed at this box"]);
     for (const [k, v] of bits) {
       const sp = el("span", null, null);
       if (k) { sp.append(document.createTextNode(k + " ")); sp.append(el("b", null, v)); }
@@ -897,8 +903,9 @@ function renderRest(s) {
     const left = el("div");
     left.append(el("div", "id", `${t.headcode || ""} ${t.name || t.label || ""}`.trim()));
     if (t.className) left.append(el("div", "meta",
-      `${t.wagons}w ${t.className} · booked ${t.booked} · ` +
-      (t.disposal === "through" ? "running through, not stopping here" : `for the ${t.disposal}`) +
+      `${t.wagons} wagons ${t.className} · booked ${t.booked} · ` +
+      (t.disposal === "through" ? "running through, not stopping here"
+        : `for the ${t.disposal}${t.destName ? " at " + t.destName : ""}`) +
       (t.facilityNeed && t.facilityNeed !== "none" && !t.serviced ? ` · wants ${t.facilityNeed.toLowerCase()}` : "")));
     if (t.vignette) left.append(el("div", "vig", "“" + t.vignette + "”"));
     b.append(left);
@@ -929,7 +936,8 @@ function openSheet(t, acts) {
   $("#m-title").textContent = `${t.headcode || ""} ${t.name || ""}`.trim();
   $("#m-sub").textContent = t.className
     ? `${t.wagons} wagons · booked ${t.booked} · ` +
-      (t.disposal === "through" ? "running through, not stopping here" : `for the ${t.disposal}`)
+      (t.disposal === "through" ? "running through, not stopping here"
+        : `for the ${t.disposal}${t.destName ? " at " + t.destName : ""}`)
     : "";
   const host = $("#m-actions"); host.textContent = "";
   for (const a of acts) {
@@ -1002,7 +1010,7 @@ function renderSeatOffer(s) {
   const on = all.filter((b) => b.manned).length;
   $("#manned").textContent = on >= 2
     ? `${on} signallers on duty. More may join.`
-    : `${on} of 2 signallers on duty — or take a box now and work both yourself.`;
+    : `Nobody at a box yet — take one, and work both yourself until somebody joins.`;
   const host = $("#seat-offer"); host.textContent = "";
   for (const b of free) {
     const btn = el("button", "btn", "TAKE " + b.name);

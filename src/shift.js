@@ -369,6 +369,8 @@ export function sliceFor(sh, boxIdx) {
         id: t.id, headcode: t.headcode, name: t.name,
         className: t.className, glyph: t.glyph, wagons: t.wagons,
         booked: t.booked, dest: t.dest, disposal: t.disposal,
+        // half these bookings are the NEIGHBOUR's yard, and nothing said so
+        destName: t.dest === "THROUGH" ? null : (sh.line.boxes[t.dest]?.name ?? null),
         facilityNeed: t.facilityNeed, serviced: t.serviced, state: t.state,
         vignette: v ? v.lines[fnv1a32(t.id + t.headcode) % v.lines.length] : t.flavour,
       };
