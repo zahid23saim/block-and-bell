@@ -86,6 +86,45 @@ export function perturb(rng, shift, K) {
     candidates.push({ trap: "T7", owner: t.origin, params: { trainId: t.id, minutes: rng.int(4, 12) } });
   }
 
+  // T6 — CONDITIONAL STOP. The train is booked to run through, but must call
+  // if the yard at its far end is fuller than a threshold. The card explains
+  // the rule; only the box that OWNS that yard can see whether it holds. So
+  // neither signaller can settle it alone: one has the rule, the other has
+  // the yard.
+  for (const t of trains) {
+    if (t.dest !== "THROUGH" || t.wagons === 0) continue;
+    const finalIdx = t.northbound ? line.boxes.length - 1 : 0;
+    const box = line.boxes[finalIdx];
+    if (!box) continue;
+    const printed = box.yard.printedCapacity;
+    candidates.push({
+      trap: "T6", owner: finalIdx,
+      params: { trainId: t.id, boxIdx: finalIdx, threshold: Math.max(4, Math.round(printed * 0.35)) },
+    });
+  }
+
+  // T9 — THE BAIT PAIR. Two workings of the same class, one at each end. The
+  // notice names the CLASS, not the working, so the box holding it looks at
+  // the one standing on its own platform and files the card as spent. Its
+  // real bite is the one it cannot see.
+  const byClass = new Map();
+  for (const t of trains) {
+    if (!byClass.has(t.classId)) byClass.set(t.classId, []);
+    byClass.get(t.classId).push(t);
+  }
+  for (const [, group] of byClass) {
+    if (group.length < 2) continue;
+    for (const real of group) {
+      const decoy = group.find((x) => x.origin !== real.origin);
+      if (!decoy) continue;
+      candidates.push({
+        trap: "T9", owner: real.origin, forceHeldBy: decoy.origin,
+        params: { trainId: real.id, decoyTrainId: decoy.id, classId: real.classId, priority: 5 },
+      });
+      break;
+    }
+  }
+
   // T8 — it is longer than the loop it is booked into
   for (const t of trains) {
     if (t.disposal !== "loop" || t.dest === "THROUGH") continue;
@@ -120,12 +159,26 @@ export function perturb(rng, shift, K) {
     }
   }
 
+  // From turn two the bait pair is mandatory, not a lucky draw: it is the
+  // answer to "I will just paste my whole book", and a night without one is
+  // a night where reading everything aloud is enough.
+  if (shift.turnNo >= 2 && !chosen.some((c) => c.trap === "T9")) {
+    const bait = (byFamily.get("T9") || [])[0];
+    if (bait) {
+      const drop = chosen.findIndex((c) => c.trap === "T7") ;
+      if (drop >= 0) chosen[drop] = bait; else chosen[chosen.length - 1] = bait;
+    }
+  }
+
   // ---- step 5: SPLIT AND TIME-RELEASE --------------------------------
   const boxCount = line.boxes.length;
   return chosen.map((c, i) => {
     // THE SPLIT RULE: never filed with the box that owns the thing it affects.
     const others = line.boxes.map((b) => b.idx).filter((x) => x !== c.owner);
-    const heldBy = others.length ? rng.pick(others) : (c.owner + 1) % boxCount;
+    // a bait pair must sit with the box holding the look-alike, or there is
+    // nothing to mistake it for
+    const heldBy = c.forceHeldBy != null ? c.forceHeldBy
+      : others.length ? rng.pick(others) : (c.owner + 1) % boxCount;
 
     // 60% known at booking-on; 40% arrive mid-shift as a district wire.
     // T7 is always late — you find out a train is late by it being late.
@@ -203,6 +256,12 @@ export function applyTraps(shift, facts) {
     } else if (f.trap === "T7") {
       const t = trains.find((x) => x.id === p.trainId);
       if (t) t.readyAt += p.minutes;
+    } else if (f.trap === "T6") {
+      const t = trains.find((x) => x.id === p.trainId);
+      if (t) t.conditionalStop = { boxIdx: p.boxIdx, threshold: p.threshold };
+    } else if (f.trap === "T9") {
+      const t = trains.find((x) => x.id === p.trainId);
+      if (t) t.priority = p.priority;
     } else if (f.trap === "T8") {
       const t = trains.find((x) => x.id === p.trainId);
       if (t) t.wagons = p.wagons;

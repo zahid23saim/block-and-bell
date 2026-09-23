@@ -170,7 +170,20 @@ const CLASS_OF_HEADCODE = {
 };
 
 export function drawTrains(rng, n, line) {
-  const idents = rng.shuffle(TABLES.identities.trains).slice(0, n);
+  const pool = rng.shuffle(TABLES.identities.trains);
+  const idents = pool.slice(0, n);
+
+  // THE BAIT PAIR needs two workings of the SAME CLASS running from opposite
+  // ends - "the ballast train" has to be ambiguous, or there is nothing to
+  // mistake. Guarantee the pair exists at the draw rather than hoping the
+  // shuffle provides one.
+  const classOf = (i) => CLASS_OF_HEADCODE[i.headcode];
+  const hasPair = idents.some((a, i) => idents.some((b, j) => j > i && classOf(a) === classOf(b)));
+  if (!hasPair && n >= 2) {
+    const wanted = pool.find((cand) =>
+      !idents.includes(cand) && idents.some((i) => classOf(i) === classOf(cand)));
+    if (wanted) idents[n - 1] = wanted;
+  }
   const classes = TABLES.identities.classes;
   const last = line.boxes.length - 1;
 
@@ -182,6 +195,17 @@ export function drawTrains(rng, n, line) {
   const dirs = rng.shuffle(
     Array.from({ length: n }, (_, i) => i < Math.ceil(n / 2))
   );
+
+  // and the pair must start at opposite ends, or one box holds both of them
+  outer: for (let i = 0; i < idents.length; i++) {
+    for (let j = i + 1; j < idents.length; j++) {
+      if (classOf(idents[i]) !== classOf(idents[j])) continue;
+      if (dirs[i] !== dirs[j]) break outer;
+      const swap = dirs.findIndex((d, k) => k !== i && k !== j && d !== dirs[j]);
+      if (swap >= 0) { const tmp = dirs[j]; dirs[j] = dirs[swap]; dirs[swap] = tmp; }
+      break outer;
+    }
+  }
 
   // SOLUTION FIRST, applied at the draw: we never book a train somewhere it
   // cannot physically be put. A shed disposal at a box with no shed is not a
@@ -362,7 +386,10 @@ export function simulate(line, trains, opts = {}) {
     // knows the capacities and assumes the roads are clear.
     const blind = believedView && opts.blindOccupancy && boxIdx !== t.at;
     const w = believedView ? believedWagons(t) : t.ref.wagons;
-    const d = t.ref.disposal;
+    // a conditional stop turns a THROUGH working into one that must call
+    const cs = t.ref.conditionalStop;
+    const d = cs && boxes[cs.boxIdx] && boxes[cs.boxIdx].yardUsed >= cs.threshold
+      ? "platform" : t.ref.disposal;
 
     if (d === "through") return true;
     if (d === "platform") return blind ? true : live.platformFree;
@@ -377,7 +404,10 @@ export function simulate(line, trains, opts = {}) {
 
   /** It goes where it is booked, or it stands there until it can be shunted. */
   function chooseDisposal(t, boxIdx) {
-    return canDispose(t, boxIdx, false) ? t.ref.disposal : null;
+    if (!canDispose(t, boxIdx, false)) return null;
+    const cs = t.ref.conditionalStop;
+    return cs && boxes[cs.boxIdx] && boxes[cs.boxIdx].yardUsed >= cs.threshold
+      ? "platform" : t.ref.disposal;
   }
 
   /**

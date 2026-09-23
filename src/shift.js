@@ -133,6 +133,22 @@ export function renderFact(fact, shift) {
     return sub(`Yard at {BOX} will not hold more than ${fact.params.actualCapacity} wagons tonight. Board is wrong.`);
   if (fact.trap === "T3") return sub(`Loop {LOOP} at {BOX} is out of use. Do not book anything into it.`);
   if (fact.trap === "T5") return sub(pick(archetypesFor(train)).template);
+  if (fact.trap === "T6") {
+    const pool = TABLES.orders.conditionalStops;
+    const box = shift.line.boxes[fact.params.boxIdx];
+    const arch = pool.length ? pick(pool).gloss : "";
+    return (
+      `{TRAIN} runs through ${box ? box.name : "the far box"} unless there are ` +
+      `${fact.params.threshold} wagons or more standing in the yard there — then it calls. ` +
+      `You cannot see that yard. Ask.`
+    ).replace("{TRAIN}", train ? `${train.headcode} ${train.name}` : "that working");
+  }
+  if (fact.trap === "T9") {
+    const cls = TABLES.identities.classes.find((c) => c.id === fact.params.classId);
+    const label = cls ? cls.label.toLowerCase() : "goods";
+    // names the CLASS, never the working - that is the whole trap
+    return `The ${label} takes precedence over everything else on the branch tonight.`;
+  }
   if (fact.trap === "T7") return sub(`{TRAIN} is running ${fact.params.minutes} minutes late.`);
   if (fact.trap === "T8")
     return sub(`{TRAIN} is ${fact.params.wagons} wagons. Longer than it looks on the book.`);
@@ -226,6 +242,20 @@ export function newShift(roomCode, turnNo, boxCount) {
 
 const finalBoxOf = (sh, t) =>
   t.dest === "THROUGH" ? (t.northbound ? sh.line.boxes.length - 1 : 0) : t.dest;
+
+/**
+ * The road this train actually needs, which is not always the road its book
+ * prints. A conditional stop turns a train booked THROUGH into one that must
+ * call - but only when the yard at the far end is fuller than the threshold,
+ * and only the box that owns that yard can see whether it is.
+ */
+export function effectiveDisposal(sh, t) {
+  const cs = t.conditionalStop;
+  if (!cs) return t.disposal;
+  const r = sh.roads[cs.boxIdx];
+  if (!r) return t.disposal;
+  return r.yardUsed >= cs.threshold ? "platform" : t.disposal;
+}
 
 export function canPlace(sh, t, boxIdx, road) {
   const r = sh.roads[boxIdx];
@@ -533,8 +563,9 @@ export function legalFor(sh, idx, opts = {}) {
       // for nothing, which made those notices - and the neighbour holding
       // them - worth precisely nothing.
       let any = false;
+      const need = effectiveDisposal(sh, t);
       for (const [action, road, lab] of roads) {
-        if (road !== t.disposal) continue;
+        if (road !== need) continue;
         if (canPlace(sh, t, idx, road)) {
           any = true;
           out.push({ action, label: lab, trainId: t.id, train: label, booked: true });

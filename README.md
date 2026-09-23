@@ -101,10 +101,6 @@ the quiet stretches actually run.
 The design document is deliberately larger than what shipped, and it is easier to say so than to
 let you find out:
 
-- **Two of the nine trap families.** Seven are implemented (`src/traps.js`): a facility out of use,
-  a yard smaller than its board, a loop out of use, a slow section, a priority inversion, late
-  running, and a train longer than the loop it is booked into. The conditional stop (T6) and the
-  bait pair (T9) are not.
 - **The counterfactual** - "the shift you didn't have" - on the Notice.
 - **The rejection tests are not a gate.** The design has the generator reroll a shift that fails
   R1-R5. Here they exist as functions in `src/traps.js` and as measurement in `test/ceiling.mjs`,
@@ -129,6 +125,25 @@ and the answer was not the one the design expected. Run `test/ceiling.mjs`:
 
 Those thresholds were written without an implementation to check them against. They are kept in
 the published design exactly as authored.
+
+## The nine traps
+
+All nine families in the design are implemented (`src/traps.js`): a facility out of use, a yard
+smaller than its board, a loop out of use, a slow section, a priority inversion, a conditional
+stop, late running, a train longer than the loop it is booked into, and the bait pair.
+
+Two of them carry the design's whole argument, so they are worth describing:
+
+**The conditional stop.** A train is booked to run *through*, but must call if the yard at the far
+end is fuller than a threshold. The rule is printed in one box's book; the yard is visible only to
+the other. Neither signaller can settle it alone - one has the rule, the other has the wagons.
+
+**The bait pair.** Two workings of the same class run from opposite ends, and the notice names the
+CLASS, not the working: *"The ballast train takes precedence over everything else tonight."* The box
+holding that card looks at the ballast train standing on its own platform, files the card as spent,
+and never says it out loud. Its real bite is the one it cannot see. The draw guarantees the pair
+exists - a same-class pair at opposite ends - so from turn two the bait is not a lucky roll. It is
+the direct answer to "I will just paste my whole book at you."
 
 ## The bells
 
