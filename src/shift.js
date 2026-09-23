@@ -268,6 +268,11 @@ export function tick(sh) {
         const sec = sh.sections.find((s) => s.occupiedBy === t.id);
         if (sec) { sec.occupiedBy = null; sec.lamp = "CLEAR"; sec.grant = null; }
         t.state = "WAITING";
+      } else if (t.dest === "THROUGH") {
+        // A train booked THROUGH does not stop and does not want anybody's
+        // roads. It reaches the far end and is away. Offering it a platform
+        // would have a goods train squatting on a road it never needed.
+        place(sh, t, t.at, "through");
       }
     }
   }
@@ -288,7 +293,12 @@ export function sliceFor(sh, boxIdx) {
   const b = sh.line.boxes[boxIdx];
   const printed = sh.printedLine.boxes[boxIdx];
   const r = sh.roads[boxIdx];
-  const here = sh.trains.filter((t) => t.at === boxIdx && t.state !== "DONE");
+  // A train keeps `at` set to the box it left until it lands, so RUNNING must
+  // be excluded or the same working is drawn twice: once out in the section
+  // and once still standing on your platform.
+  const here = sh.trains.filter(
+    (t) => t.at === boxIdx && t.state !== "DONE" && t.state !== "RUNNING"
+  );
   const vign = TABLES.vignettes.vignettes;
 
   return {

@@ -131,11 +131,50 @@ export class Room {
     if (msg.t === "ping") return this.send(ws, { t: "pong", at: msg.at });
     if (msg.t === "begin") return this.onBegin(ws, att, state);
     if (msg.t === "send_fact") return this.onSendFact(ws, att, state, msg);
+    if (msg.t === "view_box") return this.onViewBox(ws, att, state, msg);
     if (msg.t === "act") {
       return state.phase === "SHIFT"
         ? this.onShiftAct(ws, att, state, msg)
         : this.onTutorialAct(ws, att, state, msg);
     }
+  }
+
+  /**
+   * WORKING BOTH BOXES.
+   *
+   * A judge who opens the link alone at two in the morning must find a game,
+   * not a lobby. So a seated signaller may also work any box nobody is in —
+   * switching between them — and the Notice records that they worked two desks.
+   */
+  viewBoxOf(state, att) {
+    const seat = state.seats[att.seatToken];
+    if (!seat) return null;
+    const want = seat.viewBox || seat.boxId;
+    const box = state.boxes.find((b) => b.id === want);
+    if (!box) return seat.boxId;
+    const mine = want === seat.boxId;
+    return mine || !this.isManned(state, want) ? want : seat.boxId;
+  }
+
+  soloBoxes(state, att) {
+    const seat = state.seats[att.seatToken];
+    if (!seat) return [];
+    return state.boxes
+      .filter((b) => b.id === seat.boxId || !this.isManned(state, b.id))
+      .map((b) => ({ id: b.id, name: b.name, viewing: b.id === this.viewBoxOf(state, att) }));
+  }
+
+  onViewBox(ws, att, state, msg) {
+    const seat = state.seats[att.seatToken];
+    if (!seat) return;
+    const box = state.boxes.find((b) => b.id === msg.boxId);
+    if (!box) return;
+    if (box.id !== seat.boxId && this.isManned(state, box.id)) {
+      return this.toast(ws, "Somebody is working that box.");
+    }
+    seat.viewBox = box.id;
+    ws.serializeAttachment({ seatToken: att.seatToken, boxId: box.id });
+    this.broadcast(state);
   }
 
   onHello(ws, att, state, msg) {
@@ -177,18 +216,19 @@ export class Room {
   }
 
   onSay(ws, att, state, msg) {
-    if (!att.boxId) return;
+    if (!this.viewBoxOf(state, att)) return;
     const text = String(msg.text || "").slice(0, 240).trim();
     if (!text) return;
-    const box = state.boxes.find((b) => b.id === att.boxId);
+    const box = state.boxes.find((b) => b.id === this.viewBoxOf(state, att));
     state.register.push({ kind: "say", from: box.player || box.name, boxId: box.id, text });
     this.broadcast(state);
   }
 
   /** Post a card VERBATIM. You may not paraphrase what you have not read. */
   onSendFact(ws, att, state, msg) {
-    if (state.phase !== "SHIFT" || !att.boxId) return;
-    const idx = state.boxes.findIndex((b) => b.id === att.boxId);
+    const viewing = this.viewBoxOf(state, att);
+    if (state.phase !== "SHIFT" || !viewing) return;
+    const idx = state.boxes.findIndex((b) => b.id === viewing);
     const fact = state.shift.facts.find((f) => f.id === msg.factId && f.heldBy === idx);
     if (!fact) return this.toast(ws, "That card is not in your book.");
     if ((fact.knownFrom ?? 0) > state.shift.clockMin) return;
@@ -218,16 +258,17 @@ export class Room {
   // --- the tutorial block cycle -------------------------------------
 
   onTutorialAct(ws, att, state, msg) {
-    if (!att.boxId) return this.toast(ws, "Take a box first.");
-    const legal = this.tutorialLegal(state, att.boxId).map((a) => a.action);
+    const viewing = this.viewBoxOf(state, att);
+    if (!viewing) return this.toast(ws, "Take a box first.");
+    const legal = this.tutorialLegal(state, viewing).map((a) => a.action);
     if (!legal.includes(msg.action)) return this.toast(ws, "Not yours to do, not just now.");
 
     const s = state.section, t = state.train;
-    const me = state.boxes.find((b) => b.id === att.boxId);
+    const me = state.boxes.find((b) => b.id === viewing);
     const who = me.player || me.name;
 
     if (msg.action === "ASK") {
-      s.grant = { from: att.boxId, disposalIntent: msg.args?.disposalIntent, acceptedDisposal: null };
+      s.grant = { from: viewing, disposalIntent: msg.args?.disposalIntent, acceptedDisposal: null };
       this.note(state, `${who} asks Line Clear for the ${t.label}.`);
     } else if (msg.action === "GIVE") {
       s.grant.acceptedDisposal = msg.args?.acceptedDisposal || s.grant.disposalIntent;
@@ -271,8 +312,9 @@ export class Room {
   // --- the real shift ------------------------------------------------
 
   onShiftAct(ws, att, state, msg) {
-    if (!att.boxId) return this.toast(ws, "Take a box first.");
-    const idx = state.boxes.findIndex((b) => b.id === att.boxId);
+    const viewing = this.viewBoxOf(state, att);
+    if (!viewing) return this.toast(ws, "Take a box first.");
+    const idx = state.boxes.findIndex((b) => b.id === viewing);
     const sh = state.shift;
     const legal = this.shiftLegal(state, idx);
     const match = legal.find((a) => a.action === msg.action && a.trainId === msg.args?.trainId);
@@ -326,6 +368,12 @@ export class Room {
         }
         place(sh, t, idx, road);
         this.note(state, `${who} puts the ${t.headcode} ${t.name} in the ${road}.`);
+        break;
+      }
+
+      case "DETACH": {
+        place(sh, t, idx, "detached");
+        this.note(state, `${who} breaks up the ${t.headcode} ${t.name} and stows it where there is room.`);
         break;
       }
 
@@ -394,10 +442,22 @@ export class Room {
           }
         }
         if (!any) {
-          out.push({
-            action: "SHUNT", label: "SHUNT IT", trainId: t.id, train: label,
-            hint: "Nowhere will take it as it stands. This costs minutes.",
-          });
+          // Shunting buys time for a road to clear. If one never does, the
+          // train is split up and stowed in pieces — always possible, never
+          // cheap. Without this a working that fits nowhere would sit being
+          // offered SHUNT for ever and the night could not end.
+          if (t.shuntUntil && sh.clockMin >= t.shuntUntil) {
+            out.push({
+              action: "DETACH", label: "DETACH AND STOW", trainId: t.id, train: label,
+              danger: true,
+              hint: "Break it up and put it wherever there is room. It will not run again tonight.",
+            });
+          } else {
+            out.push({
+              action: "SHUNT", label: "SHUNT IT", trainId: t.id, train: label,
+              hint: "Nowhere will take it as it stands. This costs minutes.",
+            });
+          }
         }
       } else if (!sec.grant && !sec.occupiedBy) {
         out.push({
@@ -530,7 +590,10 @@ export class Room {
     this.save(state);
     for (const ws of this.ctx.getWebSockets()) {
       const att = ws.deserializeAttachment() || {};
-      this.send(ws, this.snapshot(state, att.boxId));
+      const viewing = att.seatToken ? this.viewBoxOf(state, att) : att.boxId;
+      const snap = this.snapshot(state, viewing);
+      const desks = att.seatToken ? this.soloBoxes(state, att) : [];
+      this.send(ws, desks.length > 1 ? { ...snap, desks } : snap);
     }
   }
 

@@ -96,6 +96,9 @@ const run = async () => {
   ok(moved, `the clock runs (${c0} -> ${A.last.clock})`);
 
   // ---- work a train ---------------------------------------------------
+  // trains come on offer on their booked headway, so wait rather than peek
+  await until(() => A.last.legalActions.some(a=>a.action==="ASK") ||
+                    B.last.legalActions.some(a=>a.action==="ASK"), 30000);
   const asker = A.last.legalActions.some(a=>a.action==="ASK") ? A
               : B.last.legalActions.some(a=>a.action==="ASK") ? B : null;
   ok(!!asker, "some box is offered ASK LINE CLEAR");
@@ -115,8 +118,13 @@ const run = async () => {
         act(asker, "SEND_INTO_SECTION", { trainId: s.trainId });
         const occupied = await until(() => asker.last.sections.some((x) => x.lamp === "OCCUPIED"));
         ok(occupied, "the section reads OCCUPIED");
-        const arrived = await until(() => other.last.trains.some((t) => t.id === s.trainId), 40000);
-        ok(arrived, "the train arrives at the far box");
+        // It either stands at the far box, or — if it is booked THROUGH —
+        // runs off the line and is away. Either way it leaves the section.
+        const cleared = await until(() =>
+          other.last.trains.some((t) => t.id === s.trainId) ||
+          other.last.sections.every((x) => x.lamp === "CLEAR"), 45000);
+        const stood = other.last.trains.some((t) => t.id === s.trainId);
+        ok(cleared, `the train completes the section (${stood ? "stands at the far box" : "ran through and is away"})`);
       }
     }
   }

@@ -73,6 +73,13 @@ h1{font-family:var(--mono);font-weight:600;letter-spacing:.06em;font-size:30px;m
   font-size:15px;line-height:20px;border-bottom:1px solid var(--box-edge)}
 .ribbon.waiting{color:var(--oil-amber);font-family:var(--mono);letter-spacing:.06em}
 
+/* ---------------------------------------------------------- desks */
+.desks{display:flex;gap:0;margin:10px 0 0;border:1px solid var(--box-edge)}
+.desks button{flex:1;background:transparent;border:0;padding:9px 6px;min-height:42px;
+  font-family:var(--mono);font-size:11.5px;letter-spacing:.06em;color:var(--chalk-dim)}
+.desks button[aria-pressed=true]{background:rgba(200,155,60,.12);color:var(--brass)}
+.solonote{font-size:12.5px;color:var(--oil-amber);margin:8px 0 0}
+
 /* ---------------------------------------------------------- board */
 .board{padding:12px 0}
 .farbox{display:flex;justify-content:space-between;align-items:baseline;
@@ -216,6 +223,8 @@ h1{font-family:var(--mono);font-weight:600;letter-spacing:.06em;font-size:30px;m
     <div class="ribbon" id="ribbon"></div>
 
     <div class="board">
+      <div class="desks hidden" id="desks"></div>
+      <p class="solonote hidden" id="solonote">You are working both boxes. The Notice will record that you worked two desks.</p>
       <div class="farbox">
         <span>▣ <b id="far-name">—</b></span>
         <span id="far-miles"></span>
@@ -347,8 +356,24 @@ function render(s) {
   if (s.phase === "REPORT" && s.report) { renderReport(s); return; }
   document.querySelector(".board").classList.remove("hidden");
   document.querySelector(".tabs").classList.remove("hidden");
+  renderDesks(s);
   renderBoard(s);
   renderSheet(s);
+}
+
+/** A lone signaller may work any box nobody is in, and switch between them. */
+function renderDesks(s) {
+  const host = $("#desks"), note = $("#solonote");
+  const desks = s.desks || [];
+  if (desks.length < 2) { host.classList.add("hidden"); note.classList.add("hidden"); return; }
+  host.classList.remove("hidden"); note.classList.remove("hidden");
+  host.textContent = "";
+  for (const d of desks) {
+    const b = el("button", null, d.name.replace(" BOX", ""));
+    b.setAttribute("aria-pressed", String(!!d.viewing));
+    b.onclick = () => ws.send(JSON.stringify({ t: "view_box", boxId: d.id }));
+    host.append(b);
+  }
 }
 
 /** The Notice of Delay — the thing people screenshot. */
