@@ -436,8 +436,13 @@ export class Room {
         // printing "nothing to do" and letting the screen look broken.
         const slice = sliceFor(state.shift, idx);
         const unposted = slice.book.filter((c) => !c.posted).length;
+        // Do not say the section is busy while the lamp beside it reads CLEAR.
+        // Usually there is simply no working due this minute.
         const train = state.shift.trains.find((t) => t.id === sec.occupiedBy);
-        const where = train ? `The ${train.headcode} ${train.name} is in the section` : "The section is busy";
+        const where = train
+          ? `The ${train.headcode} ${train.name} is in the section`
+          : sec.occupiedBy ? "The section is busy"
+          : "Nothing is due this minute";
         if (unposted > 0) {
           return `${where}. ${unposted} thing${unposted === 1 ? "" : "s"} in your book your neighbour cannot see.`;
         }
@@ -517,6 +522,9 @@ export class Room {
       section: other ? {
         id: s.id, to: other.name, miles: s.miles, lamp: s.lamp,
         asked: !!s.grant, occupied: !!s.occupiedBy,
+        // name the working rather than calling it "a train" - it is the only
+        // one on the branch and the player has been staring at it
+        occupiedBy: s.occupiedBy ? t.label : null,
       } : null,
       trains: me && t.at === me.id
         ? [{ id: t.id, headcode: "12", name: "LIGHT ENGINE", disposal: t.disposal }]
