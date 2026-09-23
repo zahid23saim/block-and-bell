@@ -319,7 +319,9 @@ function showWaiting(code) {
 // ---- socket ----------------------------------------------------------
 function connect(code) {
   room = code;
-  seatToken = localStorage.getItem("bb:seat:" + code);
+  // reading it throws in private mode and wherever site data is blocked,
+  // which would otherwise take the whole page down on load
+  try { seatToken = localStorage.getItem("bb:seat:" + code); } catch { seatToken = null; }
   const proto = location.protocol === "https:" ? "wss:" : "ws:";
   ws = new WebSocket(`${proto}//${location.host}/api/ws?room=${code}`);
   ws.onopen = () => { setWire(true); ws.send(JSON.stringify({ t: "hello", v: 1, resumeToken: seatToken || undefined })); };
