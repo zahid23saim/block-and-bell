@@ -71,6 +71,9 @@ h1{font-family:var(--mono);font-weight:600;letter-spacing:.06em;font-size:30px;m
   border-bottom:1px solid var(--box-edge);font-family:var(--mono);font-size:13px}
 .status .code{color:var(--brass);letter-spacing:.12em}
 .status .spacer{flex:1}
+.status #help{background:transparent;border:0;padding:4px 8px;min-height:32px;
+  color:var(--chalk-dim);font-family:var(--mono);font-size:14px;line-height:1}
+.status #help:hover{color:var(--brass)}
 .status #mute{background:transparent;border:0;padding:4px 6px;min-height:32px;
   color:var(--brass);font-size:13px;line-height:1}
 .status #mute.off{color:#4a4d54}
@@ -182,6 +185,16 @@ h1{font-family:var(--mono);font-weight:600;letter-spacing:.06em;font-size:30px;m
   color:var(--brass);font-family:var(--mono);font-size:12px;letter-spacing:.06em}
 
 /* ---------------------------------------------------------- sheet modal */
+#rules{position:fixed;inset:0;background:rgba(6,7,8,.82);display:none;
+  align-items:flex-start;justify-content:center;z-index:25;overflow-y:auto;padding:24px 0}
+#rules.on{display:flex}
+.rulesbox{max-height:none}
+.rulesbox h4{font-family:var(--mono);font-size:11px;letter-spacing:.1em;color:var(--brass);
+  margin:16px 0 4px;font-weight:400}
+.rulesbox p{color:var(--chalk);font-size:14px;line-height:1.5;margin:0 0 4px}
+.rulesbox p.r-lead{color:var(--chalk);font-size:15px}
+.rulesbox p.r-note{color:var(--chalk-dim);font-size:13px;margin-top:6px}
+.rulesbox b{color:var(--brass);font-weight:600}
 #modal{position:fixed;inset:0;background:rgba(6,7,8,.72);display:none;
   align-items:flex-end;justify-content:center;z-index:20}
 #modal.on{display:flex}
@@ -211,6 +224,7 @@ h1{font-family:var(--mono);font-weight:600;letter-spacing:.06em;font-size:30px;m
     <div id="pick">
       <button class="btn" id="btn-open">OPEN A BOX</button>
       <button class="btn ghost" id="btn-join">JOIN WITH A CODE</button>
+      <button class="btn ghost" id="btn-how">HOW THIS WORKS</button>
     </div>
 
     <div id="joining" class="hidden">
@@ -239,6 +253,7 @@ h1{font-family:var(--mono);font-weight:600;letter-spacing:.06em;font-size:30px;m
       <span class="code" id="code-chip">····</span>
       <span class="spacer"></span>
       <span id="delay" class="mono"></span>
+      <button id="help" title="How this works" aria-label="How this works">?</button>
       <button id="mute" title="Bells" aria-label="Mute the bells">◆</button>
       <span id="wire" class="wire-ok">● wire good</span>
     </div>
@@ -272,6 +287,43 @@ h1{font-family:var(--mono);font-weight:600;letter-spacing:.06em;font-size:30px;m
     </div>
   </section>
 </div>
+
+<div id="rules"><div class="modalbox rulesbox">
+  <h3>HOW THIS WORKS</h3>
+  <p class="r-lead">One single track between the boxes. Only one train may be in it at a time,
+     so nothing moves unless the far box says it can.</p>
+
+  <h4>What you can see</h4>
+  <p>Your own platform, loops, yard and the trains standing at them. Your neighbour's line is a
+     lamp and nothing else. You cannot see their roads, their trains or their book.</p>
+
+  <h4>What is in your book</h4>
+  <p>Working orders and notices for <b>your neighbour's</b> trains and premises — never your own.
+     Theirs has yours. That is the whole game: read a card, say it out loud, and ask for what you
+     cannot see. Some cards are inert. Some arrive mid-shift.</p>
+
+  <h4>Working a train</h4>
+  <p><b>ASK LINE CLEAR</b> — offer a train to the far box, naming where it is going.<br>
+     <b>GIVE LINE CLEAR</b> — accept it, if you can take it. <b>HOLD THE LINE</b> if you cannot.<br>
+     <b>SEND INTO SECTION</b> — once it has been given.<br>
+     <b>TO THE PLATFORM / LOOP / YARD / SHED</b> — put an arrived train where its book says.
+     If that road will not take it, <b>SHUNT</b> costs minutes and <b>DETACH</b> breaks it up.</p>
+  <p class="r-note">A train goes where it is booked or it is shunted. It blocks the section until
+     it is dealt with, so a road you were not told about is expensive.</p>
+
+  <h4>The bells</h4>
+  <p>One strike — somebody is asking you for the road.<br>
+     Two strikes — a train is entering the section.<br>
+     Two, pause, one — the section is cleared.<br>
+     Telegraph chatter — a new notice has reached your book.<br>
+     A wooden knock — that was refused.</p>
+
+  <h4>How it ends</h4>
+  <p>When every working is away you get a <b>Notice of Delay</b>: what was booked against what
+     happened, and every card that was never read out.</p>
+
+  <button class="btn ghost" id="rules-close">BACK TO THE BOX</button>
+</div></div>
 
 <div id="modal"><div class="modalbox">
   <h3 id="m-title"></h3><p id="m-sub"></p><div id="m-actions"></div>
@@ -933,8 +985,18 @@ function renderSheet(s) {
 }
 
 function renderSeatOffer(s) {
-  const free = (s.boxes || []).filter((b) => !b.manned);
-  $("#manned").textContent = `${(s.boxes || []).filter((b) => b.manned).length} of ${(s.boxes || []).length} signallers on duty.`;
+  const all = s.boxes || [];
+  // The tutorial is worked between the first two boxes. Offering all four to
+  // the first person through the door lets them sit at Kelbrook and stare at
+  // a board with nothing on it, so the later desks only appear once the two
+  // that matter are taken.
+  const tutorial = all.slice(0, 2);
+  const offerable = tutorial.every((b) => b.manned) ? all : tutorial;
+  const free = offerable.filter((b) => !b.manned);
+  const on = all.filter((b) => b.manned).length;
+  $("#manned").textContent = on >= 2
+    ? `${on} signallers on duty. More may join.`
+    : `${on} of 2 signallers on duty.`;
   const host = $("#seat-offer"); host.textContent = "";
   for (const b of free) {
     const btn = el("button", "btn", "TAKE " + b.name);
@@ -949,6 +1011,14 @@ function sendSay() {
   if (!text || !ws) return;
   ws.send(JSON.stringify({ t: "say", text })); i.value = "";
 }
+const openRules = () => $("#rules").classList.add("on");
+const closeRules = () => $("#rules").classList.remove("on");
+$("#help").onclick = openRules;
+$("#btn-how").onclick = openRules;
+$("#rules-close").onclick = closeRules;
+$("#rules").onclick = (e) => { if (e.target.id === "rules") closeRules(); };
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") { closeRules(); closeSheet(); } });
+
 const muteBtn = $("#mute");
 function paintMute() {
   muteBtn.classList.toggle("off", Sound.muted);

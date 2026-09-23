@@ -126,6 +126,17 @@ and the answer was not the one the design expected. Run `test/ceiling.mjs`:
 Those thresholds were written without an implementation to check them against. They are kept in
 the published design exactly as authored.
 
+## Learning it
+
+There is no modal tutorial and no carousel - the design forbids both. A cold player is taught by
+doing: a two-player light engine that cannot be got wrong, and a ribbon that names the next action
+in plain English at every moment.
+
+What was missing was somewhere to look things up once the tutorial is over, so **HOW THIS WORKS**
+sits on the landing page and behind `?` in the status bar during play. It is a sheet, not a gate:
+one rule, what you can and cannot see, what each action does, what the bells mean, how a shift
+ends. It never blocks anything and closes on Escape.
+
 ## The nine traps
 
 All nine families in the design are implemented (`src/traps.js`): a facility out of use, a yard
