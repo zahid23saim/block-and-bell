@@ -71,6 +71,9 @@ h1{font-family:var(--mono);font-weight:600;letter-spacing:.06em;font-size:30px;m
   border-bottom:1px solid var(--box-edge);font-family:var(--mono);font-size:13px}
 .status .code{color:var(--brass);letter-spacing:.12em}
 .status .spacer{flex:1}
+.status #mute{background:transparent;border:0;padding:4px 6px;min-height:32px;
+  color:var(--brass);font-size:13px;line-height:1}
+.status #mute.off{color:#4a4d54}
 .wire-ok{color:var(--lamp-green)} .wire-bad{color:var(--signal-red)}
 .ribbon{min-height:36px;display:flex;align-items:center;padding:9px 0;
   font-size:15px;line-height:20px;border-bottom:1px solid var(--box-edge)}
@@ -228,6 +231,7 @@ h1{font-family:var(--mono);font-weight:600;letter-spacing:.06em;font-size:30px;m
       <span class="code" id="code-chip">····</span>
       <span class="spacer"></span>
       <span id="delay" class="mono"></span>
+      <button id="mute" title="Bells" aria-label="Mute the bells">◆</button>
       <span id="wire" class="wire-ok">● wire good</span>
     </div>
 
@@ -274,11 +278,116 @@ h1{font-family:var(--mono);font-weight:600;letter-spacing:.06em;font-size:30px;m
 const $ = (s) => document.querySelector(s);
 const el = (t, c, txt) => { const n = document.createElement(t); if (c) n.className = c; if (txt != null) n.textContent = txt; return n; };
 
+
+/**
+ * The bells.
+ *
+ * Deviation from the design, stated plainly: it specifies five mp3 assets
+ * under 60 KB. These are synthesised with Web Audio instead - zero bytes, no
+ * asset pipeline, nothing that can fail to load, and a bell is mostly a stack
+ * of inharmonic partials decaying at different rates, which is cheaper to
+ * write than to record. The rhythms are the historical block codes: one beat
+ * to ask, two for a train entering the section, two-pause-one for a section
+ * cleared. Nobody has to learn them; they just become familiar.
+ */
+const Sound = (() => {
+  let ctx = null, muted = false;
+  try { muted = localStorage.getItem("bb:mute") === "1"; } catch {}
+
+  function ready() {
+    if (!ctx) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return null;
+      try { ctx = new AC(); } catch { return null; }
+    }
+    if (ctx.state === "suspended") ctx.resume().catch(() => {});
+    return ctx;
+  }
+  // browsers refuse audio until the player has touched the page
+  const unlock = () => { ready(); };
+  window.addEventListener("pointerdown", unlock, { once: true });
+  window.addEventListener("keydown", unlock, { once: true });
+
+  /** One brass strike: inharmonic partials, fast attack, uneven decay. */
+  function strike(at, level, decay, base) {
+    const c = ctx;
+    const partials = [1, 2.04, 2.98, 4.11, 5.43, 6.79];
+    const weights  = [1, 0.55, 0.42, 0.26, 0.16, 0.09];
+    partials.forEach((r, i) => {
+      const o = c.createOscillator(), g = c.createGain();
+      o.type = "sine";
+      o.frequency.value = base * r * (1 + (i % 2 ? 0.0015 : -0.0015));
+      const peak = level * weights[i];
+      g.gain.setValueAtTime(0.0001, at);
+      g.gain.exponentialRampToValueAtTime(peak, at + 0.004);
+      g.gain.exponentialRampToValueAtTime(0.0001, at + decay * (1 - i * 0.11));
+      o.connect(g).connect(c.destination);
+      o.start(at); o.stop(at + decay + 0.05);
+    });
+  }
+
+  /** Telegraph chatter: short filtered clicks over half a second. */
+  function sounder(at) {
+    const c = ctx;
+    const pattern = [0, 0.07, 0.115, 0.21, 0.255, 0.30, 0.39, 0.46];
+    for (const t of pattern) {
+      const o = c.createOscillator(), g = c.createGain(), f = c.createBiquadFilter();
+      o.type = "square"; o.frequency.value = 1180;
+      f.type = "bandpass"; f.frequency.value = 1600; f.Q.value = 6;
+      g.gain.setValueAtTime(0.0001, at + t);
+      g.gain.exponentialRampToValueAtTime(0.09, at + t + 0.002);
+      g.gain.exponentialRampToValueAtTime(0.0001, at + t + 0.035);
+      o.connect(f).connect(g).connect(c.destination);
+      o.start(at + t); o.stop(at + t + 0.05);
+    }
+  }
+
+  /** A soft wooden refusal. */
+  function thunk(at) {
+    const c = ctx;
+    const o = c.createOscillator(), g = c.createGain();
+    o.type = "triangle";
+    o.frequency.setValueAtTime(196, at);
+    o.frequency.exponentialRampToValueAtTime(104, at + 0.13);
+    g.gain.setValueAtTime(0.0001, at);
+    g.gain.exponentialRampToValueAtTime(0.28, at + 0.006);
+    g.gain.exponentialRampToValueAtTime(0.0001, at + 0.14);
+    o.connect(g).connect(c.destination);
+    o.start(at); o.stop(at + 0.2);
+  }
+
+  const buzz = (ms) => { try { navigator.vibrate && navigator.vibrate(ms); } catch {} };
+
+  return {
+    get muted() { return muted; },
+    toggle() {
+      muted = !muted;
+      try { localStorage.setItem("bb:mute", muted ? "1" : "0"); } catch {}
+      if (!muted) this.play("bell1");
+      return muted;
+    },
+    play(name) {
+      if (muted) return;
+      const c = ready();
+      if (!c) return;
+      const t = c.currentTime + 0.01;
+      if (name === "bell1") { strike(t, 0.30, 0.85, 740); buzz(10); }
+      else if (name === "bell2") { strike(t, 0.28, 0.75, 740); strike(t + 0.17, 0.28, 0.85, 740); buzz(10); }
+      else if (name === "bell21") {
+        strike(t, 0.26, 0.6, 740); strike(t + 0.16, 0.26, 0.6, 740); strike(t + 0.52, 0.28, 0.95, 740); buzz(10);
+      }
+      else if (name === "sounder") sounder(t);
+      else if (name === "thunk") thunk(t);
+    },
+  };
+})();
+
 let ws = null, room = null, seatToken = null, lastSeq = -1, tab = "board", S = null;
 let retryTimer = null, retries = 0;
 
 let toastTimer = null;
 function toast(text) {
+  Sound.play("thunk");
   const t = $("#toast"); t.textContent = text; t.classList.add("on");
   clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove("on"), 3400);
 }
@@ -353,7 +462,10 @@ function connect(code) {
       $("#code-chip").textContent = m.roomCode;
     } else if (m.t === "snapshot") {
       if (m.seq <= lastSeq) return;      // the entire desync story
-      lastSeq = m.seq; S = m; render(m);
+      lastSeq = m.seq;
+      const prev = S; S = m;
+      cue(prev, m);
+      render(m);
     } else if (m.t === "toast") toast(m.text);
   };
 }
@@ -363,6 +475,36 @@ function setWire(ok) {
   w.className = ok ? "wire-ok" : "wire-bad";
 }
 const act = (action, args) => ws && ws.send(JSON.stringify({ t: "act", action, args }));
+
+
+/** What changed since the last snapshot, said as a bell. */
+function cue(prev, s) {
+  if (!prev || !s.you || !s.you.boxId) return;
+  // the tutorial sends one `section`, a shift sends `sections`; the bells
+  // belong to both, and the tutorial is where you learn what they mean
+  const mine = (x) =>
+    x.sections ? x.sections.filter((y) => y.mine)
+    : x.section ? [{ ...x.section, id: x.section.id || "S1" }]
+    : [];
+  const before = mine(prev), after = mine(s);
+
+  for (const sec of after) {
+    const was = before.find((x) => x.id === sec.id);
+    if (!was) continue;
+    // a train entering the section, and a section given back
+    if (was.lamp !== "OCCUPIED" && sec.lamp === "OCCUPIED") { Sound.play("bell2"); return; }
+    if (was.lamp === "OCCUPIED" && sec.lamp !== "OCCUPIED") { Sound.play("bell21"); return; }
+  }
+
+  // somebody is asking you for the road
+  const asked = (x) => (x.legalActions || []).some((a) => a.action === "GIVE");
+  if (!asked(prev) && asked(s)) { Sound.play("bell1"); return; }
+
+  // a district wire: a card you did not have a moment ago
+  const cards = (x) => new Set((x.book || []).map((c) => c.id));
+  const had = cards(prev), now = cards(s);
+  for (const id of now) if (!had.has(id)) { Sound.play("sounder"); return; }
+}
 
 // ---- render ----------------------------------------------------------
 function render(s) {
@@ -741,6 +883,15 @@ function sendSay() {
   if (!text || !ws) return;
   ws.send(JSON.stringify({ t: "say", text })); i.value = "";
 }
+const muteBtn = $("#mute");
+function paintMute() {
+  muteBtn.classList.toggle("off", Sound.muted);
+  muteBtn.textContent = Sound.muted ? "◇" : "◆";
+  muteBtn.setAttribute("aria-label", Sound.muted ? "Turn the bells on" : "Mute the bells");
+}
+muteBtn.onclick = () => { Sound.toggle(); paintMute(); };
+paintMute();
+
 $("#btn-say").onclick = sendSay;
 $("#say").addEventListener("keydown", (e) => { if (e.key === "Enter") sendSay(); });
 

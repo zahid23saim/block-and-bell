@@ -101,7 +101,6 @@ the quiet stretches actually run.
 The design document is deliberately larger than what shipped, and it is easier to say so than to
 let you find out:
 
-- **Sound.** Specified, not built.
 - **Two of the nine trap families.** Seven are implemented (`src/traps.js`): a facility out of use,
   a yard smaller than its board, a loop out of use, a slow section, a priority inversion, late
   running, and a train longer than the loop it is booked into. The conditional stop (T6) and the
@@ -130,6 +129,18 @@ and the answer was not the one the design expected. Run `test/ceiling.mjs`:
 
 Those thresholds were written without an implementation to check them against. They are kept in
 the published design exactly as authored.
+
+## The bells
+
+The historical block codes survive as *rhythm*, so nobody has to learn them: one strike to ask
+for the road, two for a train entering the section, two-pause-one for a section cleared,
+telegraph chatter for a district wire, and a soft wooden thunk when the server refuses
+something. Default on, one tap to mute, persisted, and silent until you have touched the page.
+
+Deviation from the design, stated plainly: it specifies five mp3 assets under 60 KB. They are
+synthesised with Web Audio instead - zero bytes, no asset pipeline, and nothing that can fail to
+load. A brass bell is mostly a stack of inharmonic partials decaying at different rates, which
+is cheaper to write than to record.
 
 ## The design document
 
