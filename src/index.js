@@ -79,7 +79,7 @@ export class Room {
         { id: "KEL", idx: 3, name: "KELBROOK BOX", seat: null, player: null },
       ],
       section: { id: "S1", miles: SECTION_MILES, lamp: "CLEAR", grant: null, occupiedBy: null },
-      train: { id: "12", label: "THE LIGHT ENGINE", dir: "N", at: SOUTH, disposal: null },
+      train: { id: "12", label: "LIGHT ENGINE", dir: "N", at: SOUTH, disposal: null },
       seats: {},
       register: [],
       shift: null,
@@ -467,7 +467,7 @@ export class Room {
     }
     const s = state.section, t = state.train, south = boxId === SOUTH;
     if (t.at === SOUTH && !s.grant)
-      return south ? "The light engine wants to go north. Ask Hartle if they can take it."
+      return south ? "The light engine — an engine with no train behind it — wants to go north. Ask Hartle if they can take it."
                    : "Nothing yet. Dunmere is about to ask you.";
     if (s.grant && !s.grant.acceptedDisposal)
       return south ? "Asked. Wait for Hartle."
@@ -536,7 +536,7 @@ export class Room {
         occupiedBy: s.occupiedBy ? t.label : null,
       } : null,
       trains: me && t.at === me.id
-        ? [{ id: t.id, headcode: "12", name: "LIGHT ENGINE", disposal: t.disposal }]
+        ? [{ id: t.id, headcode: "", name: "LIGHT ENGINE", disposal: t.disposal }]
         : [],
       legalActions: me ? this.tutorialLegal(state, me.id) : [],
     };
