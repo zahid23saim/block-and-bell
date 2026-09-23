@@ -184,7 +184,7 @@ h1{font-family:var(--mono);font-weight:600;letter-spacing:.06em;font-size:30px;m
       <h1>BLOCK &amp; BELL</h1>
       <p class="sub">One single track. Two signal boxes. You can only see your own — so say it out loud.</p>
     </div>
-    <p class="fine">Two players · about six minutes a shift · no app, no account, no name required.</p>
+    <p class="fine">Two players on two devices, about six minutes a shift. On your own, you work both boxes.<br>No app, no account, no name required.</p>
 
     <div id="pick">
       <button class="btn" id="btn-open">OPEN A BOX</button>
@@ -412,8 +412,8 @@ function renderReport(s) {
   host.append(n);
 
   const again = el("button", "btn", "ANOTHER NIGHT");
-  again.append(el("span", "sub2", "A fresh shift on the same branch."));
-  again.onclick = () => location.reload();
+  again.append(el("span", "sub2", "Open a new box on a different branch."));
+  again.onclick = () => { location.href = location.origin; };
   host.append(again);
 }
 

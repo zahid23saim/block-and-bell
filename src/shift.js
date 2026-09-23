@@ -412,3 +412,152 @@ export function buildReport(sh, register, boxNames) {
     allAway: sh.trains.every((t) => t.state === "DONE"),
   };
 }
+
+// ---------------------------------------------------------------- legality
+
+/**
+ * Which buttons exist for this box, right now.
+ *
+ * Pure, and deliberately not a method on the Durable Object: a night that
+ * silently runs out of legal moves is the worst bug this game can have, and
+ * it has to be findable in a local loop rather than only over a websocket.
+ */
+export function legalFor(sh, idx, opts = {}) {
+  if (!sh || opts.paused) return [];
+  const out = [];
+  const sec = sh.sections[0];
+  const boxCount = sh.line.boxes.length;
+  const finalOf = (t) => (t.dest === "THROUGH" ? (t.northbound ? boxCount - 1 : 0) : t.dest);
+
+  for (const t of sh.trains) {
+    if (t.at !== idx || t.state === "DONE" || t.state === "RUNNING") continue;
+    if (t.readyClock > sh.clockMin) continue;
+    if (t.shuntUntil && sh.clockMin < t.shuntUntil) continue;
+    const label = `${t.headcode} ${t.name}`;
+
+    if (!t.serviced && t.facilityNeed !== "none") {
+      const down = sh.line.boxes[idx].facilityDownUntil?.[t.facilityNeed] ?? 0;
+      if (sh.line.boxes[idx].facilities[t.facilityNeed] && sh.clockMin >= down) {
+        out.push({
+          action: t.facilityNeed === "WATER" ? "TAKE_WATER" : "TAKE_COAL",
+          label: t.facilityNeed === "WATER" ? "TAKE WATER" : "TAKE COAL",
+          trainId: t.id, train: label,
+        });
+        continue;
+      }
+      // It wants water this box cannot give. It must go on to find some —
+      // so it is NOT stuck here; fall through to the movement actions.
+    }
+
+    if (t.at === finalOf(t)) {
+      const roads = [
+        ["TO_PLATFORM", "platform", "TO THE PLATFORM"],
+        ["TO_LOOP", "loop", "INTO THE LOOP"],
+        ["TO_YARD", "yard", "INTO THE YARD"],
+        ["TO_SHED", "shed", "TO THE SHED"],
+      ];
+      let any = false;
+      for (const [action, road, lab] of roads) {
+        if (canPlace(sh, t, idx, road)) {
+          any = true;
+          out.push({ action, label: lab, trainId: t.id, train: label, booked: road === t.disposal });
+        }
+      }
+      if (!any) {
+        if (t.shuntUntil && sh.clockMin >= t.shuntUntil) {
+          out.push({
+            action: "DETACH", label: "DETACH AND STOW", trainId: t.id, train: label, danger: true,
+            hint: "Break it up and put it wherever there is room. It will not run again tonight.",
+          });
+        } else {
+          out.push({
+            action: "SHUNT", label: "SHUNT IT", trainId: t.id, train: label,
+            hint: "Nowhere will take it as it stands. This costs minutes.",
+          });
+        }
+      }
+    } else if (!sec.grant) {
+      // A train may be OFFERED while another is still in the section. The
+      // grant queues and the road is only given when the section clears.
+      // Without this both boxes sit watching a train cross with nothing to
+      // decide — 89% of all dead air, and the longest silences in the game.
+      out.push({
+        action: "ASK", label: sec.occupiedBy ? "OFFER THE NEXT TRAIN" : "ASK LINE CLEAR",
+        trainId: t.id, train: label,
+        hint: sec.occupiedBy ? "The section is busy. Ask now and it goes the moment it clears." : undefined,
+        args: { disposalIntent: t.disposal },
+      });
+    }
+  }
+
+  if (sec.grant && !sec.grant.given && sec.grant.from !== idx) {
+    const t = sh.trains.find((x) => x.id === sec.grant.trainId);
+    const nm = t ? `${t.headcode} ${t.name}` : "";
+    out.push({ action: "GIVE", label: "GIVE LINE CLEAR", trainId: sec.grant.trainId, train: nm,
+               hint: `for the ${sec.grant.intent}` });
+    out.push({ action: "HOLD_THE_LINE", label: "HOLD THE LINE", trainId: sec.grant.trainId,
+               train: nm, danger: true });
+  }
+  if (sec.grant && sec.grant.given && sec.grant.from === idx && !sec.occupiedBy) {
+    const t = sh.trains.find((x) => x.id === sec.grant.trainId);
+    out.push({ action: "SEND_INTO_SECTION", label: "SEND INTO SECTION",
+               trainId: sec.grant.trainId, train: t ? `${t.headcode} ${t.name}` : "" });
+  }
+  return out;
+}
+
+/**
+ * Apply one accepted action. Shared by the Durable Object and the local
+ * stall test, so the two can never drift apart.
+ * Returns a register line, or null if the action did nothing.
+ */
+export function applyAction(sh, idx, action, args, who) {
+  const sec = sh.sections[0];
+  const t = sh.trains.find((x) => x.id === args?.trainId);
+  const name = t ? `${t.headcode} ${t.name}` : "that working";
+
+  switch (action) {
+    case "ASK":
+      sec.grant = { from: idx, trainId: t.id, intent: args.disposalIntent || t.disposal, given: false };
+      return `${who} asks Line Clear for the ${name}, for the ${sec.grant.intent}.`;
+
+    case "GIVE":
+      sec.grant.given = true; sec.lamp = "GIVEN";
+      return `${who} gives Line Clear for the ${name}.`;
+
+    case "HOLD_THE_LINE":
+      sec.grant = null;
+      return `${who} holds the line: ${args?.reason || "cannot take it yet"}.`;
+
+    case "SEND_INTO_SECTION": {
+      if (sec.occupiedBy) return null;
+      const to = t.northbound ? t.at + 1 : t.at - 1;
+      const slow = sh.clockMin < sec.slowUntil ? sec.slowsBy : 0;
+      const transit = Math.max(2, Math.round(sec.miles / 2) + slow);
+      sec.occupiedBy = t.id; sec.lamp = "OCCUPIED"; sec.grant = null;
+      t.state = "RUNNING"; t.pendingTo = to; t.arriveAt = sh.clockMin + transit;
+      return `${who} sends the ${name} into the section.`;
+    }
+
+    case "TAKE_WATER":
+    case "TAKE_COAL":
+      t.serviced = true; t.readyClock = sh.clockMin + SERVICE_MIN;
+      return `${who} ${action === "TAKE_WATER" ? "waters" : "coals"} the ${name}.`;
+
+    case "TO_PLATFORM": case "TO_LOOP": case "TO_YARD": case "TO_SHED": {
+      const road = action.slice(3).toLowerCase();
+      if (!canPlace(sh, t, idx, road)) return null;
+      place(sh, t, idx, road);
+      return `${who} puts the ${name} in the ${road}.`;
+    }
+
+    case "DETACH":
+      place(sh, t, idx, "detached");
+      return `${who} breaks up the ${name} and stows it where there is room.`;
+
+    case "SHUNT":
+      t.shuntUntil = sh.clockMin + 8;
+      return `${who} sets about shunting the ${name}. It will take a while.`;
+  }
+  return null;
+}

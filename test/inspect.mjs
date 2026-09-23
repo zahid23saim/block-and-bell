@@ -1,0 +1,21 @@
+const BASE = "https://block-and-bell.zahid23saim.workers.dev";
+const WS = BASE.replace(/^http/, "ws");
+const code = process.env.BB_ROOM;
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+let last = null;
+const sock = new WebSocket(`${WS}/api/ws?room=${code}`);
+const send = (o) => sock.send(JSON.stringify(o));
+sock.addEventListener("open", () => send({ t: "hello", v: 1 }));
+sock.addEventListener("message", (ev) => {
+  const m = JSON.parse(ev.data);
+  if (m.t === "snapshot") last = m;
+});
+await sleep(2500);
+console.log("phase", last?.phase, "clock", last?.clock, "delay", last?.delay, "paused", last?.paused);
+console.log("you:", last?.you?.boxName, "| desks:", (last?.desks||[]).map(d=>d.name+(d.viewing?"*":"")).join(", "));
+console.log("sections:", JSON.stringify(last?.sections));
+console.log("roads:", JSON.stringify(last?.roads));
+console.log("trains at this box:");
+for (const t of (last?.trains||[])) console.log("   ", t.headcode, t.name, t.wagons+"w", "state?", t.state, "disposal", t.disposal, "dest", t.dest, "need", t.facilityNeed, "serviced", t.serviced);
+console.log("legalActions:", JSON.stringify(last?.legalActions));
+sock.close(); process.exit(0);

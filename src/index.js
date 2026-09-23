@@ -6,12 +6,14 @@
  * a box can only ever be sent what that box is allowed to know.
  */
 
-import { newShift, sliceFor, tick, canPlace, place, shiftOver, buildReport } from "./shift.js";
+import { newShift, sliceFor, tick, canPlace, place, shiftOver, buildReport, legalFor, applyAction } from "./shift.js";
 
 const CODE_ALPHABET = "ABCDEFGHJKLMNPRSTUVWXYZ"; // no I, O, Q — misread on a phone
 
 const BOX_IDS = ["DUN", "HAR", "WES", "KEL"];
-const TICK_MS = 4000;    // one simulated minute every four real seconds
+const TICK_MS = 3000;    // one simulated minute every three real seconds
+// At 4s a quiet stretch ran to 40 real seconds of "nothing to do"; measured
+// silences are 6-10 sim minutes, so 3s keeps the worst of them under 30s.
 const SECTION_MILES = 7;
 const SOUTH = "DUN";
 const NORTH = "HAR";
@@ -325,65 +327,8 @@ export class Room {
     const t = sh.trains.find((x) => x.id === msg.args.trainId);
     const sec = sh.sections[0];
 
-    switch (msg.action) {
-      case "ASK":
-        // TWO KEYS: you may not ask without naming where it is going.
-        sec.grant = { from: idx, trainId: t.id, intent: msg.args.disposalIntent || t.disposal, given: false };
-        this.note(state, `${who} asks Line Clear for the ${t.headcode} ${t.name}, for the ${sec.grant.intent}.`);
-        break;
-
-      case "GIVE":
-        sec.grant.given = true;
-        sec.lamp = "GIVEN";
-        this.note(state, `${who} gives Line Clear for the ${t.headcode} ${t.name}.`);
-        break;
-
-      case "HOLD_THE_LINE":
-        this.note(state, `${who} holds the line: ${msg.args.reason || "cannot take it yet"}.`);
-        sec.grant = null;
-        break;
-
-      case "SEND_INTO_SECTION": {
-        if (sec.occupiedBy) return this.toast(ws, "There is already a train in that section.");
-        const to = t.northbound ? t.at + 1 : t.at - 1;
-        const slow = sh.clockMin < sec.slowUntil ? sec.slowsBy : 0;
-        const transit = Math.max(2, Math.round(sec.miles / 2) + slow);
-        sec.occupiedBy = t.id; sec.lamp = "OCCUPIED"; sec.grant = null;
-        t.state = "RUNNING"; t.pendingTo = to; t.arriveAt = sh.clockMin + transit;
-        this.note(state, `${who} sends the ${t.headcode} ${t.name} into the section.`);
-        break;
-      }
-
-      case "TAKE_WATER":
-      case "TAKE_COAL":
-        t.serviced = true;
-        t.readyClock = sh.clockMin + 3;
-        this.note(state, `${who} waters the ${t.headcode} ${t.name}.`);
-        break;
-
-      case "TO_PLATFORM": case "TO_LOOP": case "TO_YARD": case "TO_SHED": {
-        const road = msg.action.slice(3).toLowerCase();
-        if (!canPlace(sh, t, idx, road)) {
-          return this.toast(ws, `The ${road} will not take it. Ask your neighbour why.`);
-        }
-        place(sh, t, idx, road);
-        this.note(state, `${who} puts the ${t.headcode} ${t.name} in the ${road}.`);
-        break;
-      }
-
-      case "DETACH": {
-        place(sh, t, idx, "detached");
-        this.note(state, `${who} breaks up the ${t.headcode} ${t.name} and stows it where there is room.`);
-        break;
-      }
-
-      case "SHUNT": {
-        // The expensive way out of a misfile. Always possible, never cheap.
-        t.shuntUntil = sh.clockMin + 8;
-        this.note(state, `${who} sets about shunting the ${t.headcode} ${t.name}. It will take a while.`);
-        break;
-      }
-    }
+    const line = applyAction(sh, idx, msg.action, msg.args, who);
+    if (line) this.note(state, line);
 
     if (shiftOver(sh)) {
       state.phase = "REPORT";
@@ -392,101 +337,10 @@ export class Room {
     this.broadcast(state);
   }
 
-  /**
-   * The server authors the buttons. A box is only ever offered what it may
-   * actually do, so a cold player cannot reach an illegal state by curiosity.
-   */
+  /** The server authors the buttons; the logic itself lives in shift.js. */
   shiftLegal(state, idx) {
-    const sh = state.shift;
-    if (!sh || state.phase !== "SHIFT" || state.paused) return [];
-    const out = [];
-    const sec = sh.sections[0];
-    const boxCount = sh.line.boxes.length;
-    const finalOf = (t) => (t.dest === "THROUGH" ? (t.northbound ? boxCount - 1 : 0) : t.dest);
-
-    for (const t of sh.trains) {
-      if (t.at !== idx || t.state === "DONE" || t.state === "RUNNING") continue;
-      if (t.readyClock > sh.clockMin) continue;
-      if (t.shuntUntil && sh.clockMin < t.shuntUntil) continue;
-
-      const label = `${t.headcode} ${t.name}`;
-
-      // water and coal, if this box can actually provide it now
-      if (!t.serviced && t.facilityNeed !== "none") {
-        const down = sh.line.boxes[idx].facilityDownUntil?.[t.facilityNeed] ?? 0;
-        if (sh.line.boxes[idx].facilities[t.facilityNeed] && sh.clockMin >= down) {
-          out.push({
-            action: t.facilityNeed === "WATER" ? "TAKE_WATER" : "TAKE_COAL",
-            label: t.facilityNeed === "WATER" ? "TAKE WATER" : "TAKE COAL",
-            trainId: t.id, train: label,
-          });
-        }
-      }
-
-      if (t.at === finalOf(t)) {
-        // it is home: it must be PUT somewhere
-        const roads = [
-          ["TO_PLATFORM", "platform", "TO THE PLATFORM"],
-          ["TO_LOOP", "loop", "INTO THE LOOP"],
-          ["TO_YARD", "yard", "INTO THE YARD"],
-          ["TO_SHED", "shed", "TO THE SHED"],
-        ];
-        let any = false;
-        for (const [action, road, lab] of roads) {
-          if (canPlace(sh, t, idx, road)) {
-            any = true;
-            out.push({
-              action, label: lab, trainId: t.id, train: label,
-              booked: road === t.disposal,
-            });
-          }
-        }
-        if (!any) {
-          // Shunting buys time for a road to clear. If one never does, the
-          // train is split up and stowed in pieces — always possible, never
-          // cheap. Without this a working that fits nowhere would sit being
-          // offered SHUNT for ever and the night could not end.
-          if (t.shuntUntil && sh.clockMin >= t.shuntUntil) {
-            out.push({
-              action: "DETACH", label: "DETACH AND STOW", trainId: t.id, train: label,
-              danger: true,
-              hint: "Break it up and put it wherever there is room. It will not run again tonight.",
-            });
-          } else {
-            out.push({
-              action: "SHUNT", label: "SHUNT IT", trainId: t.id, train: label,
-              hint: "Nowhere will take it as it stands. This costs minutes.",
-            });
-          }
-        }
-      } else if (!sec.grant && !sec.occupiedBy) {
-        out.push({
-          action: "ASK", label: "ASK LINE CLEAR", trainId: t.id, train: label,
-          args: { disposalIntent: t.disposal },
-        });
-      }
-    }
-
-    // the other end of the two keys
-    if (sec.grant && !sec.grant.given && sec.grant.from !== idx) {
-      const t = sh.trains.find((x) => x.id === sec.grant.trainId);
-      out.push({
-        action: "GIVE", label: "GIVE LINE CLEAR", trainId: sec.grant.trainId,
-        train: t ? `${t.headcode} ${t.name}` : "", hint: `for the ${sec.grant.intent}`,
-      });
-      out.push({
-        action: "HOLD_THE_LINE", label: "HOLD THE LINE", trainId: sec.grant.trainId,
-        train: t ? `${t.headcode} ${t.name}` : "", danger: true,
-      });
-    }
-    if (sec.grant && sec.grant.given && sec.grant.from === idx && !sec.occupiedBy) {
-      const t = sh.trains.find((x) => x.id === sec.grant.trainId);
-      out.push({
-        action: "SEND_INTO_SECTION", label: "SEND INTO SECTION",
-        trainId: sec.grant.trainId, train: t ? `${t.headcode} ${t.name}` : "",
-      });
-    }
-    return out;
+    if (state.phase !== "SHIFT") return [];
+    return legalFor(state.shift, idx, { paused: state.paused });
   }
 
   ribbon(state, boxId) {
@@ -505,7 +359,20 @@ export class Room {
       if (sec.grant && !sec.grant.given && sec.grant.from !== idx)
         return "Your neighbour is asking for the road. Can you take it?";
       if (legal.some((a) => a.action === "SEND_INTO_SECTION")) return "Line Clear given. Send it.";
-      if (legal.length === 0) return "Nothing to do this minute. Read your book.";
+
+      if (legal.length === 0) {
+        // A crossing takes a few minutes and neither box has a lever to pull.
+        // That is the time the book is FOR, so say so specifically rather than
+        // printing "nothing to do" and letting the screen look broken.
+        const slice = sliceFor(state.shift, idx);
+        const unposted = slice.book.filter((c) => !c.posted).length;
+        const train = state.shift.trains.find((t) => t.id === sec.occupiedBy);
+        const where = train ? `The ${train.headcode} ${train.name} is in the section` : "The section is busy";
+        if (unposted > 0) {
+          return `${where}. ${unposted} thing${unposted === 1 ? "" : "s"} in your book your neighbour cannot see.`;
+        }
+        return `${where}. Nothing for you to do but watch it.`;
+      }
       const first = legal[0];
       return `${first.train} is at your box. ${first.hint ?? "Deal with it."}`;
     }
