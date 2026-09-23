@@ -464,6 +464,15 @@ export function buildReport(sh, register, players) {
   };
 }
 
+
+/** The section between two adjacent boxes, whichever way round they are given. */
+export const sectionBetween = (sh, a, b) =>
+  sh.sections.find((s) => (s.a === a && s.b === b) || (s.a === b && s.b === a));
+
+/** The section a grant for this train is sitting on, if any. */
+const sectionOfGrant = (sh, trainId) =>
+  sh.sections.find((s) => s.grant && s.grant.trainId === trainId);
+
 // ---------------------------------------------------------------- legality
 
 /**
@@ -476,7 +485,6 @@ export function buildReport(sh, register, players) {
 export function legalFor(sh, idx, opts = {}) {
   if (!sh || opts.paused) return [];
   const out = [];
-  const sec = sh.sections[0];
   const boxCount = sh.line.boxes.length;
   const finalOf = (t) => (t.dest === "THROUGH" ? (t.northbound ? boxCount - 1 : 0) : t.dest);
 
@@ -545,32 +553,43 @@ export function legalFor(sh, idx, opts = {}) {
           });
         }
       }
-    } else if (!sec.grant) {
-      // A train may be OFFERED while another is still in the section. The
-      // grant queues and the road is only given when the section clears.
-      // Without this both boxes sit watching a train cross with nothing to
-      // decide — 89% of all dead air, and the longest silences in the game.
-      out.push({
-        action: "ASK", label: sec.occupiedBy ? "OFFER THE NEXT TRAIN" : "ASK LINE CLEAR",
-        trainId: t.id, train: label,
-        hint: sec.occupiedBy ? "The section is busy. Ask now and it goes the moment it clears." : undefined,
-        args: { disposalIntent: t.disposal },
-      });
+    } else {
+      // the section this train would take next, on a line of any length
+      const to = t.northbound ? t.at + 1 : t.at - 1;
+      const sec = sectionBetween(sh, t.at, to);
+      if (sec && !sec.grant) {
+        // A train may be OFFERED while another is still in the section. The
+        // grant queues and the road is only given when the section clears.
+        // Without this both boxes sit watching a train cross with nothing to
+        // decide — 89% of all dead air, and the longest silences in the game.
+        out.push({
+          action: "ASK", label: sec.occupiedBy ? "OFFER THE NEXT TRAIN" : "ASK LINE CLEAR",
+          trainId: t.id, train: label,
+          hint: sec.occupiedBy ? "The section is busy. Ask now and it goes the moment it clears." : undefined,
+          args: { disposalIntent: t.disposal, sectionId: sec.id },
+        });
+      }
     }
   }
 
-  if (sec.grant && !sec.grant.given && sec.grant.from !== idx) {
+  // the other end of the two keys, for every section this box works
+  for (const sec of sh.sections.filter((x) => x.a === idx || x.b === idx)) {
+    if (!sec.grant) continue;
     const t = sh.trains.find((x) => x.id === sec.grant.trainId);
     const nm = t ? `${t.headcode} ${t.name}` : "";
-    out.push({ action: "GIVE", label: "GIVE LINE CLEAR", trainId: sec.grant.trainId, train: nm,
-               hint: `for the ${sec.grant.intent}` });
-    out.push({ action: "HOLD_THE_LINE", label: "HOLD THE LINE", trainId: sec.grant.trainId,
-               train: nm, danger: true });
-  }
-  if (sec.grant && sec.grant.given && sec.grant.from === idx && !sec.occupiedBy) {
-    const t = sh.trains.find((x) => x.id === sec.grant.trainId);
-    out.push({ action: "SEND_INTO_SECTION", label: "SEND INTO SECTION",
-               trainId: sec.grant.trainId, train: t ? `${t.headcode} ${t.name}` : "" });
+    const far = sh.line.boxes[sec.a === idx ? sec.b : sec.a];
+    const where = sh.sections.length > 1 ? ` (${far.name})` : "";
+
+    if (!sec.grant.given && sec.grant.from !== idx) {
+      out.push({ action: "GIVE", label: "GIVE LINE CLEAR" + where, trainId: sec.grant.trainId,
+                 train: nm, hint: `for the ${sec.grant.intent}`, args: { sectionId: sec.id } });
+      out.push({ action: "HOLD_THE_LINE", label: "HOLD THE LINE" + where,
+                 trainId: sec.grant.trainId, train: nm, danger: true, args: { sectionId: sec.id } });
+    }
+    if (sec.grant.given && sec.grant.from === idx && !sec.occupiedBy) {
+      out.push({ action: "SEND_INTO_SECTION", label: "SEND INTO SECTION" + where,
+                 trainId: sec.grant.trainId, train: nm, args: { sectionId: sec.id } });
+    }
   }
   return out;
 }
@@ -581,8 +600,14 @@ export function legalFor(sh, idx, opts = {}) {
  * Returns a register line, or null if the action did nothing.
  */
 export function applyAction(sh, idx, action, args, who) {
-  const sec = sh.sections[0];
   const t = sh.trains.find((x) => x.id === args?.trainId);
+  // On a line of three or four boxes there is more than one section, so the
+  // one this action concerns has to be found, never assumed.
+  const sec =
+    (args?.sectionId && sh.sections.find((x) => x.id === args.sectionId)) ||
+    sectionOfGrant(sh, args?.trainId) ||
+    (t ? sectionBetween(sh, t.at, t.northbound ? t.at + 1 : t.at - 1) : null) ||
+    sh.sections[0];
   const name = t ? `${t.headcode} ${t.name}` : "that working";
 
   switch (action) {

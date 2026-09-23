@@ -4,10 +4,12 @@
 
 Play: **https://block-and-bell.zahid23saim.workers.dev**
 
-Two players work a single-track railway at night in 1897, each in their own signal
-box, from separate devices. Only one train may occupy the section between them at a
-time, so every movement has to be asked for and granted. On your own, you work both
-boxes and the Notice records that you did.
+Two to four players work a single-track railway at night in 1897, each in their own
+signal box, from separate devices. Only one train may occupy the section between two
+boxes at a time, so every movement has to be asked for and granted. The line is built
+for whoever turns up: two signallers get two boxes and one section, four get four
+boxes and three sections, and a middle box works a section at each end. On your own,
+you work both boxes and the Notice records that you did.
 
 The catch is what is printed where:
 
@@ -76,9 +78,11 @@ sends each connection only its own view.
 node test/generator.mjs   # determinism, yield, invariants, achievability (600 lines)
 node test/shift.mjs       # the split rule, time-release, the book
 node test/stall.mjs       # plays 60 nights locally: can a game always be finished?
+                          #   BOXES=3 node test/stall.mjs  to play three-box lines
 node test/planner.mjs     # knowledge monotonicity - more information is never worse
 node test/solo.mjs        # one player can finish the tutorial and book on alone
 node test/spectator.mjs   # a watcher with no seat must not break the room
+node test/threebox.mjs    # three signallers, three boxes, two sections
 node test/fullgame.mjs    # end to end against the deployed worker
 node test/soloplay.mjs    # plays a whole night through to the Notice
 ```
@@ -97,7 +101,6 @@ the quiet stretches actually run.
 The design document is deliberately larger than what shipped, and it is easier to say so than to
 let you find out:
 
-- **Three and four box rings.** The generator supports up to four boxes; the server runs two.
 - **Sound.** Specified, not built.
 - **Two of the nine trap families.** Seven are implemented (`src/traps.js`): a facility out of use,
   a yard smaller than its board, a loop out of use, a slow section, a priority inversion, late

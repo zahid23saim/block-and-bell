@@ -96,6 +96,8 @@ h1{font-family:var(--mono);font-weight:600;letter-spacing:.06em;font-size:30px;m
 .mile .occ{color:var(--oil-amber)}
 .lamptext{font-family:var(--mono);font-size:13px;letter-spacing:.05em;padding:2px 0 8px}
 .lamp-CLEAR{color:var(--chalk-dim)} .lamp-GIVEN{color:var(--lamp-green)} .lamp-OCCUPIED{color:var(--oil-amber)}
+.extra-sections{display:flex;flex-direction:column;gap:4px;margin:6px 0 2px}
+.extra-sections .farbox{font-size:11.5px}
 .roadline{display:flex;flex-wrap:wrap;gap:6px 14px;font-family:var(--mono);font-size:12px;
   letter-spacing:.05em;color:var(--chalk-dim);border-top:1px solid var(--box-edge);padding-top:10px}
 .roadline b{color:var(--chalk);font-weight:400}
@@ -193,7 +195,7 @@ h1{font-family:var(--mono);font-weight:600;letter-spacing:.06em;font-size:30px;m
       <h1>BLOCK &amp; BELL</h1>
       <p class="sub">One single track. Two signal boxes. You can only see your own — so say it out loud.</p>
     </div>
-    <p class="fine">Two players on two devices, about six minutes a shift. On your own, you work both boxes.<br>No app, no account, no name required.</p>
+    <p class="fine">Two to four signallers, each on their own device, about six minutes a shift.<br>On your own, you work both boxes. No app, no account, no name required.</p>
 
     <div id="pick">
       <button class="btn" id="btn-open">OPEN A BOX</button>
@@ -233,13 +235,14 @@ h1{font-family:var(--mono);font-weight:600;letter-spacing:.06em;font-size:30px;m
 
     <div class="board">
       <div class="desks hidden" id="desks"></div>
-      <p class="solonote hidden" id="solonote">You are working both boxes. The Notice will record that you worked two desks.</p>
+      <p class="solonote hidden" id="solonote"></p>
       <div class="farbox">
         <span>▣ <b id="far-name">—</b></span>
         <span id="far-miles"></span>
       </div>
       <div class="corridor" id="corridor" role="img" aria-label="the section between the boxes"></div>
       <div class="lamptext lamp-CLEAR" id="lamptext" role="status" aria-live="polite">▣ CLEAR</div>
+      <div class="extra-sections" id="extra-sections"></div>
       <div class="roadline" id="roadline"></div>
       <div class="trains" id="trains" aria-label="workings standing at your box"></div>
     </div>
@@ -390,6 +393,9 @@ function renderDesks(s) {
   const desks = s.desks || [];
   if (desks.length < 2) { host.classList.add("hidden"); note.classList.add("hidden"); return; }
   host.classList.remove("hidden"); note.classList.remove("hidden");
+  note.textContent = desks.length > 2
+    ? `You are working ${desks.length} desks. The Notice will record that you did.`
+    : "You are working both boxes. The Notice will record that you worked two desks.";
   host.textContent = "";
   for (const d of desks) {
     const b = el("button", null, d.name.replace(" BOX", ""));
@@ -551,7 +557,22 @@ function renderReport(s) {
 }
 
 function renderBoard(s) {
-  const sec = s.sections ? s.sections.find((x) => x.mine) : s.section;
+  const mine = s.sections ? s.sections.filter((x) => x.mine) : (s.section ? [s.section] : []);
+  // a middle box works a section at each end, so draw them all
+  renderSection(mine[0]);
+  const extra = $("#extra-sections"); extra.textContent = "";
+  for (const other of mine.slice(1)) {
+    const d = el("div", "farbox");
+    const lamp = other.lamp === "OCCUPIED" ? `▤ OCCUPIED — ${other.occupiedBy || "a train"}`
+               : other.lamp === "GIVEN" ? "▥ LINE CLEAR GIVEN" : "▣ CLEAR";
+    d.append(el("span", null, "▣ " + other.to));
+    d.append(el("span", null, `${other.miles} MILES · ${lamp}`));
+    extra.append(d);
+  }
+  renderRest(s);
+}
+
+function renderSection(sec) {
   if (sec) {
     $("#far-name").textContent = sec.to;
     $("#far-miles").textContent = sec.miles + " MILES";
@@ -574,6 +595,9 @@ function renderBoard(s) {
     }
   }
 
+}
+
+function renderRest(s) {
   // your own roads, as they actually are
   const rl = $("#roadline"); rl.textContent = "";
   if (s.box && s.roads) {

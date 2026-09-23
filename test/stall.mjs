@@ -8,6 +8,7 @@ const PREF = ["GIVE","SEND_INTO_SECTION","TO_YARD","TO_LOOP","TO_PLATFORM","TO_S
               "TAKE_WATER","TAKE_COAL","DETACH","SHUNT","ASK"];
 const AL = "ABCDEFGHJKLMNPRSTUVWXYZ";
 const N = Number(process.env.N || 60);
+const BOXES = Number(process.env.BOXES || 2);
 
 let stalls = 0, finished = 0, timeouts = 0; const runs = [];
 const stallDetail = [];
@@ -15,7 +16,8 @@ const stallDetail = [];
 for (let i = 0; i < N; i++) {
   const code = AL[i%23] + AL[(i*3)%23] + AL[(i*7)%23] + AL[(i*11)%23];
   const turnNo = 1 + (i % 3);
-  const sh = newShift(code, turnNo, 2);
+  const boxCount = BOXES;
+  const sh = newShift(code, turnNo, boxCount);
   if (!sh) continue;
 
   let deadMinutes = 0, firstDead = null, run = 0, maxRun = 0;
@@ -23,7 +25,7 @@ for (let i = 0; i < N; i++) {
   for (let m = 0; m < LIMIT && !shiftOver(sh); m++) {
     let acted = false;
     for (let pass = 0; pass < 6; pass++) {
-      for (const idx of [0, 1]) {
+      for (let idx = 0; idx < boxCount; idx++) {
         const legal = legalFor(sh, idx);
         for (const p of PREF) {
           const a = legal.find(x => x.action === p);
@@ -53,7 +55,7 @@ for (let i = 0; i < N; i++) {
 
 runs.sort((a,b)=>a-b);
 const q=(p)=>runs[Math.floor(runs.length*p)]??0;
-console.log(`nights: ${N} | finished ${finished} | did not finish ${timeouts} | had dead minutes ${stalls}`);
+console.log(`boxes: ${BOXES} | nights: ${N} | finished ${finished} | did not finish ${timeouts} | had dead minutes ${stalls}`);
 console.log(`longest silence per night (sim minutes): p50 ${q(.5)}  p80 ${q(.8)}  p95 ${q(.95)}  max ${runs[runs.length-1]}`);
 console.log(`(R4 in the spec: no box should sit more than 5 sim minutes with nothing to decide)`);
 for (const d of stallDetail.slice(0, 5)) {

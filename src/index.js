@@ -69,9 +69,14 @@ export class Room {
       seq: 0,
       clock: "22:40",
       paused: false,
+      // Four seats in the lobby. The tutorial is worked between the first
+      // two; whoever else sits joins when the shift books on, and the line is
+      // generated with as many boxes as there are signallers.
       boxes: [
         { id: "DUN", idx: 0, name: "DUNMERE BOX", seat: null, player: null },
         { id: "HAR", idx: 1, name: "HARTLE BOX", seat: null, player: null },
+        { id: "WES", idx: 2, name: "WESTHOPE BOX", seat: null, player: null },
+        { id: "KEL", idx: 3, name: "KELBROOK BOX", seat: null, player: null },
       ],
       section: { id: "S1", miles: SECTION_MILES, lamp: "CLEAR", grant: null, occupiedBy: null },
       train: { id: "12", label: "12 LIGHT ENGINE", dir: "N", at: SOUTH, disposal: null },
@@ -180,7 +185,13 @@ export class Room {
   soloBoxes(state, att) {
     const seat = isToken(att.seatToken) ? state.seats[att.seatToken] : null;
     if (!seat) return [];
-    return state.boxes
+    // Only offer desks that are actually in play. During the tutorial that is
+    // the two boxes passing the light engine; offering all four would put
+    // Westhope and Kelbrook in the switcher with nothing behind them.
+    const inPlay = state.phase === "TUTORIAL" || state.phase === "READY"
+      ? state.boxes.filter((b) => b.id === SOUTH || b.id === NORTH)
+      : state.boxes;
+    return inPlay
       .filter((b) => b.id === seat.boxId || this.isFree(state, b))
       .map((b) => ({ id: b.id, name: b.name, viewing: b.id === this.viewBoxOf(state, att) }));
   }
@@ -274,11 +285,35 @@ export class Room {
   onBegin(ws, att, state) {
     if (state.phase !== "READY") return;
     if (!this.viewBoxOf(state, att)) return this.toast(ws, "Take a box first.");
-    const manned = state.boxes.filter((b) => this.isManned(state, b.id)).length;
-    state.shift = newShift(state.code, 1, 2);
+
+    // The line is built for the people who turned up: two signallers get two
+    // boxes and one section, four get four boxes and three sections.
+    const manned = state.boxes.filter((b) => this.isManned(state, b.id));
+    const n = Math.min(4, Math.max(2, manned.length));
+    state.shift = newShift(state.code, 1, n);
     if (!state.shift) return this.toast(ws, "The district office could not raise a shift. Try again.");
+
+    // Compact the seated boxes into the first n slots and take the generated
+    // line's names, so a player who sat at the fourth desk is not stranded on
+    // a line that only has two.
+    const order = manned.concat(state.boxes.filter((b) => !manned.includes(b))).slice(0, n);
+    const remap = {};
+    state.boxes = state.shift.line.boxes.map((lb, i) => {
+      const from = order[i];
+      if (from && from.seat) remap[from.seat] = lb.id;
+      return {
+        id: lb.id, idx: i, name: lb.name,
+        seat: from ? from.seat : null,
+        player: from ? from.player : null,
+        unmannedSince: from ? from.unmannedSince ?? null : null,
+      };
+    });
+    for (const [tok, boxId] of Object.entries(remap)) {
+      if (state.seats[tok]) { state.seats[tok].boxId = boxId; state.seats[tok].viewBox = null; }
+    }
+
     state.phase = "SHIFT";
-    this.note(state, `Booking on — ${state.shift.lineName}. ${manned} of 2 boxes manned.`);
+    this.note(state, `Booking on — ${state.shift.lineName}. ${manned.length} box${manned.length === 1 ? "" : "es"} manned, ${n} on the line.`);
     this.broadcast(state);
     this.ctx.storage.setAlarm(Date.now() + TICK_MS);
   }
@@ -388,9 +423,10 @@ export class Room {
       // stops the clock for everyone in the room.
       if (idx < 0) return "A shift is under way. Take a box to work it.";
       const legal = this.shiftLegal(state, idx);
-      const sec = state.shift.sections[0];
-      if (sec.grant && !sec.grant.given && sec.grant.from !== idx)
-        return "Your neighbour is asking for the road. Can you take it?";
+      const mine = state.shift.sections.filter((x) => x.a === idx || x.b === idx);
+      const asked = mine.find((x) => x.grant && !x.grant.given && x.grant.from !== idx);
+      if (asked) return "Your neighbour is asking for the road. Can you take it?";
+      const sec = mine.find((x) => x.occupiedBy) || mine[0] || state.shift.sections[0];
       if (legal.some((a) => a.action === "SEND_INTO_SECTION")) return "Line Clear given. Send it.";
 
       if (legal.length === 0) {
@@ -410,7 +446,10 @@ export class Room {
       return `${first.train} is at your box. ${first.hint ?? "Deal with it."}`;
     }
 
-    // tutorial
+    // tutorial — worked between the first two boxes; anyone else is watching
+    if (boxId !== SOUTH && boxId !== NORTH) {
+      return "Dunmere and Hartle are passing a light engine. Your line opens when they are done.";
+    }
     const s = state.section, t = state.train, south = boxId === SOUTH;
     if (t.at === SOUTH && !s.grant)
       return south ? "The light engine wants to go north. Ask Hartle if they can take it."

@@ -15,7 +15,7 @@ c.sock.addEventListener("message", (ev) => {
 });
 await sleep(2500);
 ok(!!c.last, `solo client connected to ${code}`);
-ok((c.last.desks||[]).length === 2, `offered BOTH desks (${(c.last.desks||[]).map(d=>d.name).join(", ")})`);
+ok((c.last.desks||[]).length === 2, `offered the two tutorial desks (${(c.last.desks||[]).map(d=>d.name).join(", ")})`);
 
 // play the whole tutorial alone, switching desks as needed
 for (let i = 0; i < 30 && c.last.phase !== "READY"; i++) {
