@@ -83,6 +83,7 @@ node test/planner.mjs     # knowledge monotonicity - more information is never w
 node test/solo.mjs        # one player can finish the tutorial and book on alone
 node test/spectator.mjs   # a watcher with no seat must not break the room
 node test/threebox.mjs    # three signallers, three boxes, two sections
+                          #   BOXES=4 node test/threebox.mjs  for a four-box line
 node test/fullgame.mjs    # end to end against the deployed worker
 node test/soloplay.mjs    # plays a whole night through to the Notice
 ```
