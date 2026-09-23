@@ -78,6 +78,7 @@ node test/shift.mjs       # the split rule, time-release, the book
 node test/stall.mjs       # plays 60 nights locally: can a game always be finished?
 node test/planner.mjs     # knowledge monotonicity - more information is never worse
 node test/solo.mjs        # one player can finish the tutorial and book on alone
+node test/spectator.mjs   # a watcher with no seat must not break the room
 node test/fullgame.mjs    # end to end against the deployed worker
 node test/soloplay.mjs    # plays a whole night through to the Notice
 ```
