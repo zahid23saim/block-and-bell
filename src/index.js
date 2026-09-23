@@ -500,7 +500,26 @@ export class Room {
   }
   async webSocketError() { return this.webSocketClose(); }
 
+  /**
+   * Seats are minted per connection and only ever added, so a client that
+   * reconnects in a loop grows the room's persisted state without bound.
+   * Keep the ones actually holding a box, and the most recent few besides
+   * so an honest reload can still resume.
+   */
+  pruneSeats(state) {
+    const held = new Set(state.boxes.map((b) => b.seat).filter(Boolean));
+    const rest = Object.entries(state.seats)
+      .filter(([tok]) => !held.has(tok))
+      .sort((a, b) => (b[1].lastSeen || 0) - (a[1].lastSeen || 0))
+      .slice(0, 8);
+    const kept = {};
+    for (const tok of held) if (state.seats[tok]) kept[tok] = state.seats[tok];
+    for (const [tok, v] of rest) kept[tok] = v;
+    state.seats = kept;
+  }
+
   recomputePause(state) {
+    this.pruneSeats(state);
     const now = Date.now();
     for (const b of state.boxes) {
       if (!b.seat) { b.unmannedSince = null; continue; }
