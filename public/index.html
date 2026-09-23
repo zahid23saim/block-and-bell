@@ -382,6 +382,89 @@ function renderDesks(s) {
   }
 }
 
+
+/**
+ * Draw the Notice onto a canvas and hand it over as a PNG.
+ *
+ * Drawn directly rather than serialising the DOM: foreignObject screenshots
+ * drop webfonts and taint the canvas, and this card is the thing people are
+ * meant to keep. 1200px wide, so it stands up as a cover image.
+ */
+async function saveNotice(r) {
+  try { await document.fonts.ready; } catch {}
+  const W = 1200, PAD = 72;
+  const c = document.createElement("canvas");
+  const ctx = c.getContext("2d");
+  const held = (r.held || []).slice(0, 5);
+  const H = 640 + r.rows.length * 46 + (held.length ? 90 + held.length * 62 : 0);
+  c.width = W; c.height = H;
+
+  const ink = "#1C1A17", dim = "#6B6357", rule = "#D5C9AE", red = "#9C2B22";
+  ctx.fillStyle = "#EDE3CE"; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = ink;
+
+  ctx.font = "600 62px 'Zilla Slab', Georgia, serif";
+  ctx.fillText("NOTICE OF DELAY", PAD, 130);
+
+  ctx.font = "22px 'IBM Plex Mono', monospace"; ctx.fillStyle = dim;
+  ctx.fillText(`${r.line} · ${r.from}–${r.to}`, PAD, 176);
+  const desks = (r.worked || [])
+    .map(w => (w.by && w.by !== "Signaller") ? `${w.box} (${w.by})` : w.box).join("  ·  ");
+  ctx.fillText(desks + (r.singleHanded ? "  ·  WORKED SINGLE-HANDED" : ""), PAD, 210);
+
+  let y = 268;
+  ctx.font = "24px 'IBM Plex Mono', monospace";
+  for (const row of r.rows) {
+    ctx.fillStyle = ink;
+    ctx.fillText(`${row.headcode} ${row.name}`, PAD, y);
+    ctx.fillText(`${row.booked} → ${row.actual}`, 640, y);
+    ctx.fillStyle = row.late > 0 ? red : dim;
+    ctx.textAlign = "right";
+    ctx.fillText(row.late > 0 ? `+${row.late}` : "—", W - PAD, y);
+    ctx.textAlign = "left";
+    ctx.strokeStyle = rule; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(PAD, y + 14); ctx.lineTo(W - PAD, y + 14); ctx.stroke();
+    y += 46;
+  }
+
+  y += 58;
+  ctx.fillStyle = ink;
+  ctx.font = "26px 'IBM Plex Mono', monospace";
+  ctx.fillText(`${r.total} MINUTES LOST AGAINST THE BOOK`, PAD, y);
+  ctx.font = "600 92px 'Zilla Slab', Georgia, serif";
+  ctx.textAlign = "right"; ctx.fillText(r.grade.letter, W - PAD, y + 14); ctx.textAlign = "left";
+  y += 52;
+  ctx.font = "600 30px 'Zilla Slab', Georgia, serif";
+  ctx.fillText(r.grade.line, PAD, y);
+
+  if (held.length) {
+    y += 76;
+    ctx.fillStyle = red; ctx.font = "20px 'IBM Plex Mono', monospace";
+    ctx.fillText(`${r.heldCount} THING${r.heldCount === 1 ? "" : "S"} NOBODY EVER SAID OUT LOUD`, PAD, y);
+    y += 44;
+    for (const h of held) {
+      ctx.fillStyle = ink; ctx.font = "600 26px 'Zilla Slab', Georgia, serif";
+      let t = h.text; if (t.length > 74) t = t.slice(0, 72) + "…";
+      ctx.fillText("• " + t, PAD, y);
+      ctx.fillStyle = dim; ctx.font = "18px 'IBM Plex Mono', monospace";
+      ctx.fillText("held at " + (h.box || ""), PAD + 26, y + 26);
+      y += 62;
+    }
+  }
+
+  ctx.fillStyle = dim; ctx.font = "18px 'IBM Plex Mono', monospace";
+  ctx.fillText("BLOCK & BELL · " + location.host, PAD, H - 40);
+
+  await new Promise((res) => c.toBlob((blob) => {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `notice-of-delay-${(r.line || "shift").replace(/\W+/g, "-")}.png`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    res();
+  }, "image/png"));
+}
+
 /** The Notice of Delay — the thing people screenshot. */
 function renderReport(s) {
   const r = s.report;
@@ -391,7 +474,12 @@ function renderReport(s) {
 
   const n = el("div", "notice");
   n.append(el("h2", null, "Notice of Delay"));
-  n.append(el("div", "where", `${r.line} · ${r.from}–${r.to} · ${r.boxes.join(" & ")}`));
+  // only name a signaller who actually chose a name
+  const desks = (r.worked || [])
+    .map(w => (w.by && w.by !== "Signaller") ? `${w.box} (${w.by})` : w.box)
+    .join("  ·  ");
+  n.append(el("div", "where", `${r.line} · ${r.from}–${r.to}`));
+  n.append(el("div", "where", desks + (r.singleHanded ? "  ·  WORKED SINGLE-HANDED" : "")));
 
   const tb = el("table");
   for (const row of r.rows) {
@@ -431,6 +519,11 @@ function renderReport(s) {
     n.append(q);
   }
   host.append(n);
+
+  const save = el("button", "btn", "SAVE THIS NOTICE");
+  save.append(el("span", "sub2", "Download it as a picture."));
+  save.onclick = () => saveNotice(r);
+  host.append(save);
 
   const again = el("button", "btn", "ANOTHER NIGHT");
   again.append(el("span", "sub2", "Open a new box on a different branch."));

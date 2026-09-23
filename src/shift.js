@@ -7,8 +7,8 @@
  * return a fact the asking box is not entitled to.
  */
 
-import { generateShift, simulate, TURN } from "./generator.js";
-import { buildFacts, applyTraps, NEUTRAL_PRIORITY } from "./traps.js";
+import { generateShift, simulate } from "./generator.js";
+import { buildFacts, applyTraps } from "./traps.js";
 import { TABLES } from "./content.js";
 import { fnv1a32, mulberry32 } from "./generator.js";
 
@@ -379,7 +379,19 @@ const GRADE = (total, trains) => {
  * quote is a line one of them actually typed, chosen as the last thing said
  * before the train that lost the most time.
  */
-export function buildReport(sh, register, boxNames) {
+export function buildReport(sh, register, players) {
+  // The Notice names the SIGNAL BOXES on tonight's line — the ones printed on
+  // the board all shift — not the room's placeholder seats. A player who
+  // worked Garsdyke all night should not read "DUNMERE BOX" on their receipt.
+  const boxNames = sh.line.boxes.map((b) => b.name);
+  const worked = sh.line.boxes.map((b, i) => ({
+    box: b.name,
+    by: (players || [])[i] || null,
+  }));
+  // Single-handed means one box was MANNED, not that two people happened to
+  // use the same default name. Deduping by name collapsed two signallers who
+  // had both left theirs as "Signaller".
+  const singleHanded = (players || []).filter(Boolean).length <= 1;
   const rows = sh.trains.map((t) => {
     const actual = t.doneAt != null ? sh.startMinutes + t.doneAt : null;
     const booked = t.bookedMinute != null ? sh.startMinutes + t.bookedMinute : null;
@@ -420,6 +432,8 @@ export function buildReport(sh, register, boxNames) {
     from: hhmm(sh.startMinutes),
     to: hhmm(sh.startMinutes + sh.clockMin),
     boxes: boxNames,
+    worked,
+    singleHanded,
     rows,
     total,
     grade: GRADE(total, rows.length),

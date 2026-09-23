@@ -22,7 +22,11 @@ https://block-and-bell.zahid23saim.workers.dev
 
 ## Preview image
 
-A screenshot of the NOTICE OF DELAY at the end of a shift — the game's own output, not concept art. Saved alongside this file.
+Play a shift to the end and press **SAVE THIS NOTICE** on the Notice of Delay. It
+downloads a 1200px PNG of that night's card — the game's own output, not concept art.
+
+A grade D night makes a better cover than a grade A one: the card is fuller, the
+delays are red, and the closing list reads "N THINGS NOBODY EVER SAID OUT LOUD".
 
 ## Description (492/500 characters)
 

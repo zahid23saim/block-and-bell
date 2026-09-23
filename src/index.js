@@ -427,7 +427,8 @@ export class Room {
         delay: slice.delay,
         legalActions: this.shiftLegal(state, idx),
         report: state.phase === "REPORT"
-          ? buildReport(state.shift, state.register, state.boxes.map((b) => b.player || b.name))
+          ? buildReport(state.shift, state.register,
+              state.boxes.map((b) => (this.isManned(state, b.id) ? b.player : null)))
           : null,
       };
     }
