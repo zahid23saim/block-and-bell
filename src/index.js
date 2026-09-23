@@ -14,6 +14,7 @@ const BOX_IDS = ["DUN", "HAR", "WES", "KEL"];
 const TICK_MS = 3000;    // one simulated minute every three real seconds
 // At 4s a quiet stretch ran to 40 real seconds of "nothing to do"; measured
 // silences are 6-10 sim minutes, so 3s keeps the worst of them under 30s.
+const VACANT_MS = 90000;  // how long a box stands empty before a neighbour may work it
 const SECTION_MILES = 7;
 const SOUTH = "DUN";
 const NORTH = "HAR";
@@ -148,21 +149,34 @@ export class Room {
    * not a lobby. So a seated signaller may also work any box nobody is in —
    * switching between them — and the Notice records that they worked two desks.
    */
+  /**
+   * May this client work that box?
+   *
+   * Only if nobody ever took it, or whoever did has been gone for a while.
+   * Offering a desk the instant a socket blinks would hand their book to
+   * their partner over a two-second reconnect — which is precisely the thing
+   * this game promises cannot happen.
+   */
+  isFree(state, box) {
+    if (!box.seat) return true;                       // never claimed
+    if (this.isManned(state, box.id)) return false;   // somebody is there now
+    return !!box.unmannedSince && Date.now() - box.unmannedSince >= VACANT_MS;
+  }
+
   viewBoxOf(state, att) {
     const seat = state.seats[att.seatToken];
     if (!seat) return null;
     const want = seat.viewBox || seat.boxId;
     const box = state.boxes.find((b) => b.id === want);
     if (!box) return seat.boxId;
-    const mine = want === seat.boxId;
-    return mine || !this.isManned(state, want) ? want : seat.boxId;
+    return want === seat.boxId || this.isFree(state, box) ? want : seat.boxId;
   }
 
   soloBoxes(state, att) {
     const seat = state.seats[att.seatToken];
     if (!seat) return [];
     return state.boxes
-      .filter((b) => b.id === seat.boxId || !this.isManned(state, b.id))
+      .filter((b) => b.id === seat.boxId || this.isFree(state, b))
       .map((b) => ({ id: b.id, name: b.name, viewing: b.id === this.viewBoxOf(state, att) }));
   }
 
@@ -171,7 +185,7 @@ export class Room {
     if (!seat) return;
     const box = state.boxes.find((b) => b.id === msg.boxId);
     if (!box) return;
-    if (box.id !== seat.boxId && this.isManned(state, box.id)) {
+    if (box.id !== seat.boxId && !this.isFree(state, box)) {
       return this.toast(ws, "Somebody is working that box.");
     }
     seat.viewBox = box.id;
@@ -202,7 +216,7 @@ export class Room {
   onClaimSeat(ws, att, state, msg) {
     const box = state.boxes.find((b) => b.id === msg.boxId);
     if (!box) return;
-    if (box.seat && box.seat !== att.seatToken && this.isManned(state, box.id)) {
+    if (box.seat !== att.seatToken && !this.isFree(state, box)) {
       return this.toast(ws, "That box is already worked. Take the other one.");
     }
     for (const b of state.boxes) if (b.seat === att.seatToken) b.seat = null;
@@ -487,6 +501,12 @@ export class Room {
   async webSocketError() { return this.webSocketClose(); }
 
   recomputePause(state) {
+    const now = Date.now();
+    for (const b of state.boxes) {
+      if (!b.seat) { b.unmannedSince = null; continue; }
+      if (this.isManned(state, b.id)) b.unmannedSince = null;
+      else if (!b.unmannedSince) b.unmannedSince = now;
+    }
     const seated = state.boxes.filter((b) => b.seat);
     state.paused = seated.length > 0 && !seated.every((b) => this.isManned(state, b.id));
   }
