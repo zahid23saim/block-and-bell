@@ -4,9 +4,10 @@
 
 Play: **https://block-and-bell.zahid23saim.workers.dev**
 
-Two to four players work a single-track railway at night in 1897, each in their own
-signal box, from separate devices. Only one train may occupy the section between two
-boxes at a time, so every movement has to be asked for and granted.
+Two players work a single-track railway at night in 1897, each in their own signal
+box, from separate devices. Only one train may occupy the section between them at a
+time, so every movement has to be asked for and granted. On your own, you work both
+boxes and the Notice records that you did.
 
 The catch is what is printed where:
 
@@ -53,6 +54,7 @@ or detached in the end, so a confused pair reaches a report rather than a dead e
 | [`src/traps.js`](src/traps.js) | The night's notices, the split rule, time-release, rejection tests |
 | [`src/shift.js`](src/shift.js) | Runs a live night; owns the per-seat slice and the Notice of Delay |
 | [`src/index.js`](src/index.js) | Durable Object: rooms, seats, the block cycle, the clock |
+| [`public/index.html`](public/index.html) | The whole client, in one file |
 | [`src/content.js`](src/content.js) | 24 workings, 8 classes, 60 boxes, 36 notices, 40 decoys, 208 vignettes |
 
 Cloudflare Workers + Durable Objects, SQLite-backed. Room state is persisted rather than
@@ -68,12 +70,43 @@ sends each connection only its own view.
 ## Tests
 
 ```bash
-node test/generator.mjs    # determinism, yield, invariants, achievability
-node test/shift.mjs        # the split rule, time-release, the book
-node test/planner.mjs      # knowledge monotonicity — more information is never worse
-node test/fullgame.mjs     # end-to-end against the deployed worker
-node test/autoplay.mjs     # two automatic signallers play a whole night
+node test/generator.mjs   # determinism, yield, invariants, achievability (600 lines)
+node test/shift.mjs       # the split rule, time-release, the book
+node test/stall.mjs       # plays 60 nights locally: can a game always be finished?
+node test/planner.mjs     # knowledge monotonicity - more information is never worse
+node test/solo.mjs        # one player can finish the tutorial and book on alone
+node test/fullgame.mjs    # end to end against the deployed worker
+node test/soloplay.mjs    # plays a whole night through to the Notice
 ```
+
+The live tests hit the deployed worker; point them elsewhere with `BB_BASE`.
+
+`test/capacity.mjs`, `test/deadair.mjs` and `test/ceiling.mjs` are measurement scripts rather
+than pass/fail tests. They are what the tuning in this repo is based on: the shift windows come
+from measured line throughput, and the clock speed comes from measuring how long the quiet
+stretches actually run.
+
+## What is not built
+
+The design document is deliberately larger than what shipped, and it is easier to say so than to
+let you find out:
+
+- **Three and four box rings.** The generator supports up to four boxes; the server runs two.
+- **Sound.** Specified, not built.
+- **The bait pair (T9)** - a notice whose obvious application is your own train while its real
+  bite is on a train you cannot see. The other eight trap families are implemented.
+- **The counterfactual** - "the shift you didn't have" - on the Notice.
+
+Two rejection tests in the design (R1, R3) turned out to be uncertifiable rather than unbuilt.
+Measured against a planner, the channel R1 tests is worth 0.0 minutes, and R3 at turn 1 asks for
+24 minutes of value from a night whose entire information content is worth 6.2. Those thresholds
+were written without an implementation to check them against. R2 certifies and is implemented.
+
+## The design document
+
+[`docs/DESIGN_SPEC.md`](docs/DESIGN_SPEC.md) is the original design the game was built from,
+kept as written. Section 16 is a ten-step build order; the list above is the honest account of
+which steps landed.
 
 ## A note on the planner
 
