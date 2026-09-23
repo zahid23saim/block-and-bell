@@ -25,6 +25,11 @@ function makeCode() {
   return [...b].map((n) => CODE_ALPHABET[n % CODE_ALPHABET.length]).join("");
 }
 
+// A seat token is used as an object key, so it must never be an inherited
+// property name: "__proto__", "constructor" and "toString" all resolve
+// truthy on a plain object and would impersonate a seat that does not exist.
+const isToken = (t) => typeof t === "string" && /^[0-9a-f]{32}$/.test(t);
+
 function makeToken() {
   const b = new Uint8Array(16);
   crypto.getRandomValues(b);
@@ -164,7 +169,7 @@ export class Room {
   }
 
   viewBoxOf(state, att) {
-    const seat = state.seats[att.seatToken];
+    const seat = isToken(att.seatToken) ? state.seats[att.seatToken] : null;
     if (!seat) return null;
     const want = seat.viewBox || seat.boxId;
     const box = state.boxes.find((b) => b.id === want);
@@ -173,7 +178,7 @@ export class Room {
   }
 
   soloBoxes(state, att) {
-    const seat = state.seats[att.seatToken];
+    const seat = isToken(att.seatToken) ? state.seats[att.seatToken] : null;
     if (!seat) return [];
     return state.boxes
       .filter((b) => b.id === seat.boxId || this.isFree(state, b))
@@ -181,7 +186,7 @@ export class Room {
   }
 
   onViewBox(ws, att, state, msg) {
-    const seat = state.seats[att.seatToken];
+    const seat = isToken(att.seatToken) ? state.seats[att.seatToken] : null;
     if (!seat) return;
     const box = state.boxes.find((b) => b.id === msg.boxId);
     if (!box) return;
@@ -194,8 +199,9 @@ export class Room {
   }
 
   onHello(ws, att, state, msg) {
-    let seatToken = msg.resumeToken;
-    let seat = seatToken ? state.seats[seatToken] : null;
+    let seatToken = isToken(msg.resumeToken) ? msg.resumeToken : null;
+    let seat = seatToken && Object.prototype.hasOwnProperty.call(state.seats, seatToken)
+      ? state.seats[seatToken] : null;
     if (!seat) seatToken = makeToken();
 
     const boxId = seat ? seat.boxId : null;
@@ -203,7 +209,9 @@ export class Room {
     if (seat) {
       seat.lastSeen = Date.now();
       const box = state.boxes.find((b) => b.id === seat.boxId);
-      if (box) box.seat = seatToken;
+      // Resuming reclaims your box only if nobody else is working it now.
+      // Without this check a stale token evicts whoever is sitting there.
+      if (box && (box.seat === seatToken || this.isFree(state, box))) box.seat = seatToken;
     }
 
     this.send(ws, {
@@ -216,7 +224,7 @@ export class Room {
   onClaimSeat(ws, att, state, msg) {
     // Without this a socket that skipped `hello` claims a box as seat `null`,
     // and `!box.seat` then reads that box as free to everyone else.
-    if (!att.seatToken) return this.toast(ws, "Say hello first.");
+    if (!isToken(att.seatToken)) return this.toast(ws, "Say hello first.");
     const box = state.boxes.find((b) => b.id === msg.boxId);
     if (!box) return;
     if (box.seat !== att.seatToken && !this.isFree(state, box)) {
@@ -265,6 +273,7 @@ export class Room {
 
   onBegin(ws, att, state) {
     if (state.phase !== "READY") return;
+    if (!this.viewBoxOf(state, att)) return this.toast(ws, "Take a box first.");
     const manned = state.boxes.filter((b) => this.isManned(state, b.id)).length;
     state.shift = newShift(state.code, 1, 2);
     if (!state.shift) return this.toast(ws, "The district office could not raise a shift. Try again.");
@@ -287,7 +296,10 @@ export class Room {
     const who = me.player || me.name;
 
     if (msg.action === "ASK") {
-      s.grant = { from: viewing, disposalIntent: msg.args?.disposalIntent, acceptedDisposal: null };
+      s.grant = {
+        from: viewing, acceptedDisposal: null,
+        disposalIntent: String(msg.args?.disposalIntent || "SHED").slice(0, 24),
+      };
       this.note(state, `${who} asks Line Clear for the ${t.label}.`);
     } else if (msg.action === "GIVE") {
       s.grant.acceptedDisposal = msg.args?.acceptedDisposal || s.grant.disposalIntent;
@@ -534,7 +546,10 @@ export class Room {
       if (this.isManned(state, b.id)) b.unmannedSince = null;
       else if (!b.unmannedSince) b.unmannedSince = now;
     }
-    const seated = state.boxes.filter((b) => b.seat);
+    // Pause for somebody who has just dropped, not for somebody who left an
+    // hour ago. Once the 90-second grace passes, the box counts as vacant and
+    // the remaining signaller can work it - so the night must run again.
+    const seated = state.boxes.filter((b) => b.seat && !this.isFree(state, b));
     state.paused = seated.length > 0 && !seated.every((b) => this.isManned(state, b.id));
   }
 }

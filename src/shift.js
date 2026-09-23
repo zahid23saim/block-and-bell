@@ -252,8 +252,25 @@ export function place(sh, t, boxIdx, road) {
   t.state = "DONE";
   t.doneAt = sh.clockMin + DISPOSE_MIN;
   sh.delay += Math.max(0, t.doneAt - (t.bookedMinute ?? 0));
+  releaseSection(sh, t);
+}
+
+/**
+ * Free the section a train was occupying, without destroying a Line Clear
+ * that was queued for a DIFFERENT train. Offering the next train while one is
+ * still crossing is the whole point of "OFFER THE NEXT TRAIN"; wiping the
+ * grant when the crossing train arrived silently undid it.
+ */
+function releaseSection(sh, t) {
   const sec = sh.sections.find((s) => s.occupiedBy === t.id);
-  if (sec) { sec.occupiedBy = null; sec.lamp = "CLEAR"; sec.grant = null; }
+  if (!sec) return;
+  sec.occupiedBy = null;
+  if (sec.grant && sec.grant.trainId !== t.id) {
+    sec.lamp = sec.grant.given ? "GIVEN" : "CLEAR";
+  } else {
+    sec.grant = null;
+    sec.lamp = "CLEAR";
+  }
 }
 
 /** One simulated minute. Movement only; every decision belongs to a player. */
@@ -265,8 +282,7 @@ export function tick(sh) {
       t.state = "ARRIVED";
       t.arriveAt = null;
       if (t.at !== finalBoxOf(sh, t)) {
-        const sec = sh.sections.find((s) => s.occupiedBy === t.id);
-        if (sec) { sec.occupiedBy = null; sec.lamp = "CLEAR"; sec.grant = null; }
+        releaseSection(sh, t);
         t.state = "WAITING";
       } else if (t.dest === "THROUGH") {
         // A train booked THROUGH does not stop and does not want anybody's
@@ -480,8 +496,21 @@ export function legalFor(sh, idx, opts = {}) {
         });
         continue;
       }
-      // It wants water this box cannot give. It must go on to find some —
-      // so it is NOT stuck here; fall through to the movement actions.
+      // If this box HAS the facility but it is out of use, the train waits
+      // for it - that is what the notice is about. Only fall through when the
+      // box genuinely has no such facility, in which case the train must
+      // travel on to find one.
+      const here = sh.line.boxes[idx];
+      if (here.facilities[t.facilityNeed] && t.at === finalOf(t)) {
+        // The column is here but out of use. The train cannot be stowed
+        // unserviced, so it waits - but waiting must be a CHOICE, not a
+        // locked screen: shunting it clear costs minutes and is always open.
+        out.push({
+          action: "SHUNT", label: "SHUNT IT CLEAR", trainId: t.id, train: label,
+          hint: `It is booked to take ${t.facilityNeed.toLowerCase()} here and the column is out of use.`,
+        });
+        continue;
+      }
     }
 
     if (t.at === finalOf(t)) {
@@ -491,11 +520,16 @@ export function legalFor(sh, idx, opts = {}) {
         ["TO_YARD", "yard", "INTO THE YARD"],
         ["TO_SHED", "shed", "TO THE SHED"],
       ];
+      // It goes where it is BOOKED, or it is shunted. Offering every open
+      // road let a player route around a shrunk yard or an out-of-use loop
+      // for nothing, which made those notices - and the neighbour holding
+      // them - worth precisely nothing.
       let any = false;
       for (const [action, road, lab] of roads) {
+        if (road !== t.disposal) continue;
         if (canPlace(sh, t, idx, road)) {
           any = true;
-          out.push({ action, label: lab, trainId: t.id, train: label, booked: road === t.disposal });
+          out.push({ action, label: lab, trainId: t.id, train: label, booked: true });
         }
       }
       if (!any) {
@@ -561,7 +595,10 @@ export function applyAction(sh, idx, action, args, who) {
       return `${who} asks Line Clear for the ${name}, for the ${sec.grant.intent}.`;
 
     case "GIVE":
-      sec.grant.given = true; sec.lamp = "GIVEN";
+      sec.grant.given = true;
+      // a grant may be queued while a train is still crossing; the lamp must
+      // keep reporting the section, not the promise
+      if (!sec.occupiedBy) sec.lamp = "GIVEN";
       return `${who} gives Line Clear for the ${name}.`;
 
     case "HOLD_THE_LINE": {
@@ -598,6 +635,9 @@ export function applyAction(sh, idx, action, args, who) {
 
     case "SHUNT":
       t.shuntUntil = sh.clockMin + 8;
+      // shunting it clear settles the booking: it is dealt with by hand from
+      // here, water or no water, booked road or not
+      t.serviced = true;
       return `${who} sets about shunting the ${name}. It will take a while.`;
   }
   return null;
