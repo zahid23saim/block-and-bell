@@ -214,6 +214,9 @@ export class Room {
   }
 
   onClaimSeat(ws, att, state, msg) {
+    // Without this a socket that skipped `hello` claims a box as seat `null`,
+    // and `!box.seat` then reads that box as free to everyone else.
+    if (!att.seatToken) return this.toast(ws, "Say hello first.");
     const box = state.boxes.find((b) => b.id === msg.boxId);
     if (!box) return;
     if (box.seat !== att.seatToken && !this.isFree(state, box)) {
@@ -367,6 +370,11 @@ export class Room {
 
     if (state.phase === "SHIFT") {
       const idx = state.boxes.findIndex((b) => b.id === boxId);
+      // Somebody watching without a seat has no box, so idx is -1. Everything
+      // below indexes by it, and sliceFor(-1) reaches boxes[-1].name and
+      // throws — inside broadcast(), which then never re-arms the alarm and
+      // stops the clock for everyone in the room.
+      if (idx < 0) return "A shift is under way. Take a box to work it.";
       const legal = this.shiftLegal(state, idx);
       const sec = state.shift.sections[0];
       if (sec.grant && !sec.grant.given && sec.grant.from !== idx)

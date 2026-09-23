@@ -1,5 +1,5 @@
 /** Two automatic signallers play a whole night through to the Notice. */
-const BASE = "https://block-and-bell.zahid23saim.workers.dev";
+const BASE = process.env.BB_BASE || "https://block-and-bell.zahid23saim.workers.dev";
 const WS = BASE.replace(/^http/, "ws");
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 

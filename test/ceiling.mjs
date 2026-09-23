@@ -28,12 +28,13 @@ for (const turnNo of [1,2,3]) {
     // know every card, but not live occupancy (the dump)
     const dump = planAndExecute(actual, actual, {...OPT, blindOccupancy:true});
 
-    if (zero.ok) ceil.push(zero.actual - par);
-    if (half.ok) halves.push(half.actual - par);
-    if (dump.ok) dumps.push(dump.actual - par);
+    // a run that never completes has delay Infinity; summing that prints
+    // "mean -Infinity" and tells you nothing, so leave it out and say so
+    const keep = (arr, r) => { if (r.ok && Number.isFinite(r.actual) && Number.isFinite(par)) arr.push(r.actual - par); };
+    keep(ceil, zero); keep(halves, half); keep(dumps, dump);
   }
-  const m=(a)=>(a.reduce((x,y)=>x+y,0)/(a.length||1)).toFixed(1);
-  console.log(`turn ${turnNo}:`);
+  const m=(a)=>a.length?(a.reduce((x,y)=>x+y,0)/a.length).toFixed(1):"n/a";
+  console.log(`turn ${turnNo}:  (${ceil.length}/${codes.length} shifts measurable)`);
   console.log(`   know NOTHING      : mean ${m(ceil)}  p90 ${q(ceil,.9)}  max ${Math.max(...ceil)}   <-- absolute ceiling`);
   console.log(`   lose one box book : mean ${m(halves)} p90 ${q(halves,.9)}  (R2 needs 15)`);
   console.log(`   dump, no occupancy: mean ${m(dumps)}  p90 ${q(dumps,.9)}  (R1 needs ${[12,20,30][turnNo-1]})`);

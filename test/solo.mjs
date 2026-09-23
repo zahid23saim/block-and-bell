@@ -1,5 +1,5 @@
 /** One signaller, alone, must be able to finish the tutorial and book on. */
-const BASE = "https://block-and-bell.zahid23saim.workers.dev";
+const BASE = process.env.BB_BASE || "https://block-and-bell.zahid23saim.workers.dev";
 const WS = BASE.replace(/^http/, "ws");
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 let fail = 0; const ok = (c,m)=>{console.log((c?"  PASS  ":"  FAIL  ")+m); if(!c)fail++;};

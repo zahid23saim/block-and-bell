@@ -35,9 +35,12 @@ solution. So the book a player reads is provably achievable rather than merely p
 certified across 600 generated lines in [`test/generator.mjs`](test/generator.mjs).
 
 **Trains are never booked somewhere they cannot go.** Disposals are reserved against real
-platform, loop and yard capacity as the trains are drawn. Skipping this produced shifts
-that deadlocked on impossible bookings: the underlying simulator completed **2 nights in
-400**. With it, 398.
+platform, loop and yard capacity as the trains are drawn. Skipping this produced shifts that
+deadlocked on impossible bookings - a light engine booked to a shed at a box that has no shed
+stands there for ever and holds the section shut. Measured with `test/capacity.mjs` while the
+bug was live, the simulator completed 2 nights in 400; with the reservation it completed 398.
+The shipped tree has the fix, so that script now prints 400/400 and the before-figure is
+history rather than something you can reproduce from this checkout.
 
 **A wrong decision is expensive, not fatal.** A train that cannot go where it is booked
 stands at the home signal and holds the section shut behind it. It can always be shunted
@@ -81,10 +84,12 @@ node test/soloplay.mjs    # plays a whole night through to the Notice
 
 The live tests hit the deployed worker; point them elsewhere with `BB_BASE`.
 
-`test/capacity.mjs`, `test/deadair.mjs` and `test/ceiling.mjs` are measurement scripts rather
-than pass/fail tests. They are what the tuning in this repo is based on: the shift windows come
-from measured line throughput, and the clock speed comes from measuring how long the quiet
-stretches actually run.
+The rest of `test/` is measurement and harnesses rather than pass/fail: `capacity.mjs`,
+`deadair.mjs` and `ceiling.mjs` measure the line, the silences and the value of information;
+`traps.mjs` and `planner2.mjs` are sweeps; `autoplay.mjs`, `partner.mjs` and `twoplayer.mjs`
+drive the live server. The measurement scripts are what the tuning here is based on: the shift
+windows come from measured line throughput, and the clock speed comes from measuring how long
+the quiet stretches actually run.
 
 ## What is not built
 
@@ -93,14 +98,34 @@ let you find out:
 
 - **Three and four box rings.** The generator supports up to four boxes; the server runs two.
 - **Sound.** Specified, not built.
-- **The bait pair (T9)** - a notice whose obvious application is your own train while its real
-  bite is on a train you cannot see. The other eight trap families are implemented.
+- **Two of the nine trap families.** Seven are implemented (`src/traps.js`): a facility out of use,
+  a yard smaller than its board, a loop out of use, a slow section, a priority inversion, late
+  running, and a train longer than the loop it is booked into. The conditional stop (T6) and the
+  bait pair (T9) are not.
 - **The counterfactual** - "the shift you didn't have" - on the Notice.
+- **The rejection tests are not a gate.** The design has the generator reroll a shift that fails
+  R1-R5. Here they exist as functions in `src/traps.js` and as measurement in `test/ceiling.mjs`,
+  and nothing calls them during generation. A shift is certified *solvable*, not *certified to
+  require conversation*.
 
-Two rejection tests in the design (R1, R3) turned out to be uncertifiable rather than unbuilt.
-Measured against a planner, the channel R1 tests is worth 0.0 minutes, and R3 at turn 1 asks for
-24 minutes of value from a night whose entire information content is worth 6.2. Those thresholds
-were written without an implementation to check them against. R2 certifies and is implemented.
+That last point deserves its own paragraph, because measuring it is most of the work in this repo
+and the answer was not the one the design expected. Run `test/ceiling.mjs`:
+
+- **R1** asks that sharing every card but no live road occupancy still costs 12-30 minutes. The
+  measured cost of that channel is **0.0**. Once the planner controls the hold decision it can
+  reproduce anything occupancy knowledge would have forced, so R1 tests a channel worth nothing.
+- **R3** asks for three facts at turn 1 that are each individually worth 8 minutes. The entire
+  information content of a turn-1 night measures **6.8**. Twenty-four minutes of value cannot be
+  extracted from it.
+- **R2** - delete one box's book - is the one that behaves sensibly. It wants 15 minutes and
+  measures about **7.6 at turn 1 and 25.7 at turn 3**, so it certifies on the bigger nights only.
+- **R4** (no box idle more than 5 simulated minutes) currently **fails**: `test/stall.mjs` measures
+  a median longest silence of 6 minutes. The clock speed and offering trains ahead were tuned
+  against that number rather than hiding it.
+- **R5** (a confused pair still reaches a report) **holds**: 60 of 60 nights finish.
+
+Those thresholds were written without an implementation to check them against. They are kept in
+the published design exactly as authored.
 
 ## The design document
 

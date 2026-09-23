@@ -157,6 +157,14 @@ export function buildFacts(rng, shift, K) {
       params: { trainId: t.id, priority: t.priority, bookedMinute: t.bookedMinute },
     };
   });
+  // Every signaller must book on holding at least one working order. A box
+  // whose cards were all time-released starts the shift with nothing to tell
+  // its neighbour, which is the one thing a signaller is there to do.
+  for (const b of shift.line.boxes) {
+    const mine = orders.filter((o) => o.heldBy === b.idx);
+    if (mine.length && !mine.some((o) => o.knownFrom === 0)) mine[0].knownFrom = 0;
+  }
+
   return [...orders, ...perturb(rng, shift, K)];
 }
 

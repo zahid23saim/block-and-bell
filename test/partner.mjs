@@ -1,5 +1,5 @@
 /** An automatic second signaller, so the UI can be exercised by hand. */
-const BASE = "https://block-and-bell.zahid23saim.workers.dev";
+const BASE = process.env.BB_BASE || "https://block-and-bell.zahid23saim.workers.dev";
 const WS = BASE.replace(/^http/, "ws");
 const code = process.env.BB_ROOM;
 const sock = new WebSocket(`${WS}/api/ws?room=${code}`);

@@ -31,6 +31,9 @@ body{
   font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
   font-size:15px; line-height:1.45; -webkit-text-size-adjust:100%;
   overflow-x:hidden;
+  /* one long working name or notice must not push the page sideways;
+     `anywhere` also constrains min-content sizing inside the flex columns */
+  overflow-wrap:anywhere;
 }
 button{font:inherit;color:inherit;cursor:pointer;border-radius:0}
 .mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
@@ -244,7 +247,6 @@ h1{font-family:var(--mono);font-weight:600;letter-spacing:.06em;font-size:30px;m
     <div class="tabs" role="tablist">
       <button role="tab" aria-selected="true" data-tab="board">BOARD</button>
       <button role="tab" aria-selected="false" data-tab="book">BOOK<span class="badge hidden" id="book-badge">0</span></button>
-      <button role="tab" aria-selected="false" data-tab="wire">WIRE</button>
     </div>
 
     <div class="sheet" id="sheet" aria-live="polite"></div>
@@ -270,6 +272,7 @@ const $ = (s) => document.querySelector(s);
 const el = (t, c, txt) => { const n = document.createElement(t); if (c) n.className = c; if (txt != null) n.textContent = txt; return n; };
 
 let ws = null, room = null, seatToken = null, lastSeq = -1, tab = "board", S = null;
+let retryTimer = null, retries = 0;
 
 let toastTimer = null;
 function toast(text) {
@@ -318,14 +321,26 @@ function showWaiting(code) {
 
 // ---- socket ----------------------------------------------------------
 function connect(code) {
+  clearTimeout(retryTimer);
   room = code;
   // reading it throws in private mode and wherever site data is blocked,
   // which would otherwise take the whole page down on load
   try { seatToken = localStorage.getItem("bb:seat:" + code); } catch { seatToken = null; }
   const proto = location.protocol === "https:" ? "wss:" : "ws:";
   ws = new WebSocket(`${proto}//${location.host}/api/ws?room=${code}`);
-  ws.onopen = () => { setWire(true); ws.send(JSON.stringify({ t: "hello", v: 1, resumeToken: seatToken || undefined })); };
-  ws.onclose = () => { setWire(false); setTimeout(() => connect(code), 1500); };
+  ws.onopen = () => {
+    retries = 0;
+    setWire(true);
+    ws.send(JSON.stringify({ t: "hello", v: 1, resumeToken: seatToken || undefined }));
+  };
+  ws.onclose = () => {
+    setWire(false);
+    // back off rather than hammering a server that is down, and keep only
+    // one pending retry so reconnects cannot stack up into a storm
+    const wait = Math.min(15000, 1200 * Math.pow(1.7, retries++)) + Math.random() * 400;
+    clearTimeout(retryTimer);
+    retryTimer = setTimeout(() => connect(code), wait);
+  };
   ws.onerror = () => setWire(false);
   ws.onmessage = (ev) => {
     const m = JSON.parse(ev.data);
@@ -458,6 +473,7 @@ async function saveNotice(r) {
   ctx.fillText("BLOCK & BELL · " + location.host, PAD, H - 40);
 
   await new Promise((res) => c.toBlob((blob) => {
+    if (!blob) { toast("The notice could not be drawn. Take a screenshot instead."); res(); return; }
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
     a.download = `notice-of-delay-${(r.line || "shift").replace(/\W+/g, "-")}.png`;
@@ -524,7 +540,8 @@ function renderReport(s) {
 
   const save = el("button", "btn", "SAVE THIS NOTICE");
   save.append(el("span", "sub2", "Download it as a picture."));
-  save.onclick = () => saveNotice(r);
+  save.onclick = () => saveNotice(r).catch(() =>
+    toast("The notice could not be drawn. Take a screenshot instead."));
   host.append(save);
 
   const again = el("button", "btn", "ANOTHER NIGHT");
@@ -662,7 +679,7 @@ function renderSheet(s) {
     return;
   }
 
-  if (tab === "wire" || tab === "board") {
+  if (tab === "board") {
     const reg = el("div", "reg");
     for (const line of (s.register || [])) {
       if (line.kind === "note") reg.append(el("div", "note", line.text));

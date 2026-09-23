@@ -327,7 +327,10 @@ export function sliceFor(sh, boxIdx) {
         vignette: v ? v.lines[fnv1a32(t.id + t.headcode) % v.lines.length] : t.flavour,
       };
     }),
-    sections: sh.sections.map((s) => {
+    // Only the sections this box works. Tagging them `mine` and sending the
+    // rest anyway would put a neighbour's lamp and grant on the wire the
+    // moment the line grows past two boxes.
+    sections: sh.sections.filter((s) => s.a === boxIdx || s.b === boxIdx).map((s) => {
       const other = s.a === boxIdx ? s.b : s.a;
       const occ = sh.trains.find((t) => t.id === s.occupiedBy);
       return {
@@ -550,16 +553,22 @@ export function applyAction(sh, idx, action, args, who) {
 
   switch (action) {
     case "ASK":
-      sec.grant = { from: idx, trainId: t.id, intent: args.disposalIntent || t.disposal, given: false };
+      sec.grant = {
+        from: idx, trainId: t.id, given: false,
+        // the client names the intent; it is echoed to both boxes, so clip it
+        intent: String(args.disposalIntent || t.disposal).slice(0, 24),
+      };
       return `${who} asks Line Clear for the ${name}, for the ${sec.grant.intent}.`;
 
     case "GIVE":
       sec.grant.given = true; sec.lamp = "GIVEN";
       return `${who} gives Line Clear for the ${name}.`;
 
-    case "HOLD_THE_LINE":
+    case "HOLD_THE_LINE": {
       sec.grant = null;
-      return `${who} holds the line: ${args?.reason || "cannot take it yet"}.`;
+      const reason = String(args?.reason || "cannot take it yet").slice(0, 80);
+      return `${who} holds the line: ${reason}.`;
+    }
 
     case "SEND_INTO_SECTION": {
       if (sec.occupiedBy) return null;
