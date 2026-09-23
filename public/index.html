@@ -1,0 +1,416 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>BLOCK &amp; BELL — one track, two boxes</title>
+<meta name="description" content="Two strangers work a single-track railway from opposite ends. Neither can see the other's line, and each one is holding the other's rulebook.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Zilla+Slab:wght@600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --lamp-black:#0C0D0F; --box-dark:#16181C; --box-edge:#23262C;
+  --brass:#C89B3C; --brass-dim:#8A6A28;
+  --signal-red:#C2352B; --oil-amber:#E8A33D; --lamp-green:#4E9A5F;
+  --chalk:#F2EDE3; --chalk-dim:#9A968D; --paper:#EDE3CE; --ink:#1C1A17;
+  --mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+  --slab:'Zilla Slab',Georgia,serif;
+  --sans:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:var(--lamp-black); color:var(--chalk);
+  font-family:var(--sans); font-size:15px; line-height:1.45;
+  -webkit-text-size-adjust:100%;
+  min-height:100dvh; overflow-x:hidden;
+}
+button{font:inherit;color:inherit;cursor:pointer}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.wrap{max-width:560px;margin:0 auto;padding:0 16px;min-height:100dvh;display:flex;flex-direction:column}
+
+/* ---------------------------------------------------------- landing */
+#landing{flex:1;display:flex;flex-direction:column;justify-content:center;gap:22px;padding:32px 0}
+.lamp{width:54px;height:54px;border-radius:50%;border:3px solid var(--brass);
+  background:radial-gradient(circle at 50% 45%,var(--oil-amber),#7a4d12 70%);
+  box-shadow:0 0 26px rgba(232,163,61,.38)}
+h1{font-family:var(--mono);font-weight:600;letter-spacing:.06em;font-size:30px;margin:0}
+.sub{color:var(--chalk-dim);margin:0;max-width:34ch}
+.fine{color:var(--chalk-dim);font-size:13px;margin:0}
+.btn{display:block;width:100%;min-height:56px;padding:14px 18px;margin-top:10px;
+  background:transparent;border:1px solid var(--brass);color:var(--brass);
+  font-family:var(--mono);font-weight:600;letter-spacing:.08em;text-align:left;
+  transition:background 120ms ease,color 120ms ease}
+.btn:hover{background:rgba(200,155,60,.10)}
+.btn[disabled]{border-color:var(--brass-dim);color:var(--brass-dim);cursor:default}
+.btn.ghost{border-color:var(--box-edge);color:var(--chalk-dim)}
+
+/* ---------------------------------------------------------- code entry */
+#codebox{display:flex;gap:8px;margin-top:10px}
+#codebox input{width:56px;height:56px;text-align:center;font-family:var(--mono);
+  font-size:26px;background:var(--box-dark);border:1px solid var(--box-edge);
+  color:var(--chalk);text-transform:uppercase;border-radius:0}
+#codebox input:focus{outline:2px solid var(--brass);outline-offset:-2px}
+.bigcode{font-family:var(--mono);font-size:64px;color:var(--brass);letter-spacing:.10em;margin:6px 0}
+
+/* ---------------------------------------------------------- game chrome */
+#game{display:none;flex:1;flex-direction:column;min-height:100dvh}
+.status{display:flex;align-items:center;gap:12px;height:44px;flex:0 0 44px;
+  border-bottom:1px solid var(--box-edge);font-family:var(--mono);font-size:13px}
+.status .code{color:var(--brass);letter-spacing:.12em}
+.wire-ok{color:var(--lamp-green)} .wire-bad{color:var(--signal-red)}
+.ribbon{min-height:36px;display:flex;align-items:center;padding:8px 0;
+  font-size:15px;line-height:20px;border-bottom:1px solid var(--box-edge)}
+.ribbon.waiting{color:var(--oil-amber);font-family:var(--mono);letter-spacing:.06em}
+
+/* ---------------------------------------------------------- the board */
+.board{padding:14px 0;border-bottom:1px solid var(--box-edge)}
+.farbox{display:flex;justify-content:space-between;align-items:baseline;
+  font-family:var(--mono);font-size:12px;letter-spacing:.08em;color:var(--chalk-dim)}
+.farbox b{color:var(--chalk);font-weight:600}
+.corridor{margin:10px 0 4px;border-left:2px solid var(--box-edge);padding-left:14px}
+.mile{display:flex;gap:10px;align-items:baseline;font-family:var(--mono);font-size:13px;
+  color:var(--chalk-dim);min-height:20px}
+.mile .n{width:1.5ch;color:#4a4d54}
+.mile.here{color:var(--chalk)}
+.lamptext{font-family:var(--mono);font-size:13px;letter-spacing:.06em;
+  transition:color 120ms ease}
+.lamp-CLEAR{color:var(--chalk-dim)}
+.lamp-GIVEN{color:var(--lamp-green)}
+.lamp-OCCUPIED{color:var(--oil-amber)}
+.roads{margin-top:12px;display:flex;flex-direction:column;gap:6px}
+.road{display:flex;justify-content:space-between;align-items:center;
+  border:1px solid var(--box-edge);background:var(--box-dark);padding:10px 12px;min-height:44px}
+.road .label{font-family:var(--mono);font-size:12px;letter-spacing:.08em;color:var(--chalk-dim)}
+.road .val{font-family:var(--mono);font-size:14px}
+.train{border-color:var(--brass-dim)}
+.actions{display:flex;flex-direction:column;gap:8px;margin-top:14px}
+.hint{color:var(--chalk-dim);font-size:13px;margin:2px 0 0}
+
+/* ---------------------------------------------------------- sheet */
+.tabs{display:flex;gap:0;height:48px;flex:0 0 48px;border-bottom:1px solid var(--box-edge)}
+.tabs button{flex:1;background:transparent;border:0;border-bottom:2px solid transparent;
+  font-family:var(--mono);font-size:12px;letter-spacing:.10em;color:var(--chalk-dim)}
+.tabs button[aria-selected=true]{color:var(--brass);border-bottom-color:var(--brass)}
+.sheet{flex:1;overflow-y:auto;padding:12px 0 8px}
+.reg{display:flex;flex-direction:column;gap:7px;font-size:14px}
+.reg .note{color:var(--chalk-dim);font-family:var(--mono);font-size:12.5px}
+.reg .say b{color:var(--brass);font-weight:600}
+.composer{display:flex;gap:8px;padding:8px 0 14px;border-top:1px solid var(--box-edge)}
+.composer input{flex:1;min-height:44px;background:var(--box-dark);border:1px solid var(--box-edge);
+  color:var(--chalk);padding:0 12px;font:inherit}
+.composer input:focus{outline:2px solid var(--brass);outline-offset:-2px}
+.composer button{min-height:44px;padding:0 16px;background:transparent;border:1px solid var(--brass);
+  color:var(--brass);font-family:var(--mono);font-size:12px;letter-spacing:.08em}
+
+/* ---------------------------------------------------------- toast */
+#toast{position:fixed;left:50%;transform:translateX(-50%);bottom:24px;max-width:90vw;
+  background:var(--box-dark);border:1px solid var(--signal-red);color:var(--chalk);
+  padding:12px 16px;font-size:14px;opacity:0;pointer-events:none;transition:opacity 180ms ease}
+#toast.on{opacity:1}
+.hidden{display:none !important}
+@media (prefers-reduced-motion:reduce){*{transition:none !important;animation:none !important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- ------------------------------------------------- landing -->
+  <section id="landing">
+    <div class="lamp" aria-hidden="true"></div>
+    <div>
+      <h1>BLOCK &amp; BELL</h1>
+      <p class="sub">One single track. Two signal boxes. You can only see your own — so say it out loud.</p>
+    </div>
+    <p class="fine">Two to four players · about six minutes a shift · no app, no account, no name required.</p>
+
+    <div id="pick">
+      <button class="btn" id="btn-open">OPEN A BOX</button>
+      <button class="btn ghost" id="btn-join">JOIN WITH A CODE</button>
+    </div>
+
+    <div id="joining" class="hidden">
+      <p class="fine">Type the four letters the other signaller gave you.</p>
+      <div id="codebox">
+        <input maxlength="1" inputmode="latin" autocomplete="off" aria-label="code letter 1">
+        <input maxlength="1" inputmode="latin" autocomplete="off" aria-label="code letter 2">
+        <input maxlength="1" inputmode="latin" autocomplete="off" aria-label="code letter 3">
+        <input maxlength="1" inputmode="latin" autocomplete="off" aria-label="code letter 4">
+      </div>
+      <button class="btn" id="btn-enter">ENTER THE BOX</button>
+    </div>
+
+    <div id="waiting" class="hidden">
+      <p class="fine">Your code. Read your book while you wait.</p>
+      <div class="bigcode mono" id="code-out">····</div>
+      <button class="btn ghost" id="btn-copy">COPY INVITE LINK</button>
+      <p class="fine" id="manned">1 of 2 signallers on duty.</p>
+    </div>
+  </section>
+
+  <!-- ------------------------------------------------- game -->
+  <section id="game">
+    <div class="status">
+      <span class="mono" id="clock">22:40</span>
+      <span class="code" id="code-chip">····</span>
+      <span id="wire" class="wire-ok">● wire good</span>
+    </div>
+
+    <div class="ribbon" id="ribbon"></div>
+
+    <div class="board">
+      <div class="farbox">
+        <span>▣ <b id="far-name">—</b></span>
+        <span id="far-miles">7 MILES</span>
+      </div>
+      <div class="corridor" id="corridor"></div>
+      <div class="lamptext lamp-CLEAR" id="lamptext">▣ CLEAR</div>
+      <div class="roads" id="roads"></div>
+      <div class="actions" id="actions"></div>
+    </div>
+
+    <div class="tabs" role="tablist">
+      <button role="tab" aria-selected="true" data-tab="board">BOARD</button>
+      <button role="tab" aria-selected="false" data-tab="wire">WIRE</button>
+    </div>
+
+    <div class="sheet" id="sheet"><div class="reg" id="register"></div></div>
+
+    <div class="composer">
+      <input id="say" placeholder="say something" maxlength="240" autocomplete="off">
+      <button id="btn-say">SEND</button>
+    </div>
+  </section>
+</div>
+
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(() => {
+"use strict";
+const $ = (s) => document.querySelector(s);
+const el = (t, c, txt) => { const n = document.createElement(t); if (c) n.className = c; if (txt != null) n.textContent = txt; return n; };
+
+let ws = null, room = null, seatToken = null, myBox = null, lastSeq = -1;
+
+// ---- toast -----------------------------------------------------------
+let toastTimer = null;
+function toast(text) {
+  const t = $("#toast");
+  t.textContent = text; t.classList.add("on");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove("on"), 3200);
+}
+
+// ---- landing ---------------------------------------------------------
+$("#btn-open").onclick = async () => {
+  $("#btn-open").disabled = true;
+  try {
+    const r = await fetch("/api/create", { method: "POST" });
+    const { code } = await r.json();
+    showWaiting(code);
+    connect(code);
+  } catch (e) {
+    $("#btn-open").disabled = false;
+    toast("The district office did not answer. Try again.");
+  }
+};
+
+$("#btn-join").onclick = () => {
+  $("#pick").classList.add("hidden");
+  $("#joining").classList.remove("hidden");
+  $("#codebox input").focus();
+};
+
+const boxes = [...document.querySelectorAll("#codebox input")];
+boxes.forEach((b, i) => {
+  b.addEventListener("input", () => {
+    b.value = b.value.toUpperCase().replace(/[^A-Z]/g, "");
+    if (b.value && i < 3) boxes[i + 1].focus();
+  });
+  b.addEventListener("keydown", (e) => {
+    if (e.key === "Backspace" && !b.value && i > 0) boxes[i - 1].focus();
+  });
+  b.addEventListener("paste", (e) => {
+    const txt = (e.clipboardData.getData("text") || "").toUpperCase().replace(/[^A-Z]/g, "");
+    if (txt.length >= 4) { e.preventDefault(); boxes.forEach((x, j) => x.value = txt[j] || ""); boxes[3].focus(); }
+  });
+});
+
+$("#btn-enter").onclick = () => {
+  const code = boxes.map((b) => b.value).join("");
+  if (code.length !== 4) return toast("Four letters, please.");
+  showWaiting(code);
+  connect(code);
+};
+
+$("#btn-copy").onclick = async () => {
+  const link = location.origin + "/?room=" + room;
+  try { await navigator.clipboard.writeText(link); toast("Invite link copied."); }
+  catch { toast(link); }
+};
+
+function showWaiting(code) {
+  room = code;
+  $("#pick").classList.add("hidden");
+  $("#joining").classList.add("hidden");
+  $("#waiting").classList.remove("hidden");
+  $("#code-out").textContent = code;
+}
+
+// ---- socket ----------------------------------------------------------
+function connect(code) {
+  room = code;
+  seatToken = localStorage.getItem("bb:seat:" + code);
+  const proto = location.protocol === "https:" ? "wss:" : "ws:";
+  ws = new WebSocket(`${proto}//${location.host}/api/ws?room=${code}`);
+
+  ws.onopen = () => {
+    setWire(true);
+    ws.send(JSON.stringify({ t: "hello", v: 1, resumeToken: seatToken || undefined }));
+  };
+  ws.onclose = () => { setWire(false); setTimeout(() => connect(code), 1500); };
+  ws.onerror = () => setWire(false);
+  ws.onmessage = (ev) => {
+    const m = JSON.parse(ev.data);
+    if (m.t === "hello_ack") {
+      seatToken = m.seatToken;
+      localStorage.setItem("bb:seat:" + code, seatToken);
+      myBox = m.boxId;
+      $("#code-chip").textContent = m.roomCode;
+      // no seat yet: the snapshot will offer the free boxes
+    } else if (m.t === "snapshot") {
+      // desync story, entire: render only if this is newer than what we drew
+      if (m.seq <= lastSeq) return;
+      lastSeq = m.seq;
+      render(m);
+    } else if (m.t === "toast") {
+      toast(m.text);
+    }
+  };
+}
+
+function setWire(ok) {
+  const w = $("#wire");
+  w.textContent = ok ? "● wire good" : "● wire down";
+  w.className = ok ? "wire-ok" : "wire-bad";
+}
+
+// ---- render ----------------------------------------------------------
+function render(s) {
+  if (s.you && s.you.boxId) {
+    myBox = s.you.boxId;
+    $("#landing").style.display = "none";
+    $("#game").style.display = "flex";
+  } else {
+    // still seat-less: offer the free boxes on the landing screen
+    renderSeatOffer(s);
+    return;
+  }
+
+  $("#clock").textContent = s.clock;
+  $("#code-chip").textContent = s.code;
+
+  const rb = $("#ribbon");
+  rb.textContent = s.ribbon || "";
+  rb.classList.toggle("waiting", !!s.paused);
+
+  if (s.section) {
+    $("#far-name").textContent = s.section.to;
+    $("#far-miles").textContent = s.section.miles + " MILES";
+    const lt = $("#lamptext");
+    const glyph = s.section.lamp === "OCCUPIED" ? "▤ OCCUPIED"
+                : s.section.lamp === "GIVEN"    ? "▥ LINE CLEAR GIVEN"
+                : "▣ CLEAR";
+    lt.textContent = glyph;
+    lt.className = "lamptext lamp-" + s.section.lamp;
+
+    const c = $("#corridor"); c.textContent = "";
+    for (let m = s.section.miles; m >= 0; m--) {
+      const row = el("div", "mile" + (m === 0 ? " here" : ""));
+      row.append(el("span", "n", String(m)));
+      if (m === 0) row.append(el("span", null, "── YOUR BOX ──"));
+      else if (m === 4 && s.section.occupied) row.append(el("span", null, "12 LIGHT ENGINE ↑"));
+      c.append(row);
+    }
+  }
+
+  const roads = $("#roads"); roads.textContent = "";
+  if (s.trains.length === 0) {
+    const r = el("div", "road");
+    r.append(el("span", "label", "YOUR ROADS"));
+    r.append(el("span", "val", "empty"));
+    roads.append(r);
+  }
+  for (const t of s.trains) {
+    const r = el("div", "road train");
+    r.append(el("span", "label", t.disposal ? "TO THE " + t.disposal : "AT YOUR BOX"));
+    r.append(el("span", "val", t.label));
+    roads.append(r);
+  }
+
+  const acts = $("#actions"); acts.textContent = "";
+  for (const a of s.legalActions) {
+    const b = el("button", "btn", a.label);
+    b.onclick = () => ws.send(JSON.stringify({ t: "act", action: a.action, args: a.args }));
+    acts.append(b);
+    if (a.hint) acts.append(el("p", "hint", a.hint));
+  }
+
+  const reg = $("#register"); reg.textContent = "";
+  for (const line of s.register) {
+    if (line.kind === "note") reg.append(el("div", "note", line.text));
+    else {
+      const d = el("div", "say");
+      const b = el("b", null, line.from + ": ");
+      d.append(b); d.append(document.createTextNode(line.text));
+      reg.append(d);
+    }
+  }
+  $("#sheet").scrollTop = $("#sheet").scrollHeight;
+}
+
+function renderSeatOffer(s) {
+  const free = s.boxes.filter((b) => !b.manned);
+  $("#manned").textContent = `${s.boxes.filter((b) => b.manned).length} of ${s.boxes.length} signallers on duty.`;
+  let host = $("#seat-offer");
+  if (!host) {
+    host = el("div"); host.id = "seat-offer";
+    $("#waiting").append(host);
+  }
+  host.textContent = "";
+  for (const b of free) {
+    const btn = el("button", "btn", "TAKE " + b.name);
+    btn.onclick = () => ws.send(JSON.stringify({ t: "claim_seat", boxId: b.id, name: "Signaller" }));
+    host.append(btn);
+  }
+}
+
+// ---- say -------------------------------------------------------------
+function sendSay() {
+  const i = $("#say");
+  const text = i.value.trim();
+  if (!text || !ws) return;
+  ws.send(JSON.stringify({ t: "say", text }));
+  i.value = "";
+}
+$("#btn-say").onclick = sendSay;
+$("#say").addEventListener("keydown", (e) => { if (e.key === "Enter") sendSay(); });
+
+document.querySelectorAll(".tabs button").forEach((b) => {
+  b.onclick = () => {
+    document.querySelectorAll(".tabs button").forEach((x) => x.setAttribute("aria-selected", String(x === b)));
+  };
+});
+
+// ---- deep link -------------------------------------------------------
+const qs = new URLSearchParams(location.search);
+const deep = (qs.get("room") || "").toUpperCase();
+if (/^[A-Z]{4}$/.test(deep)) { showWaiting(deep); connect(deep); }
+
+setInterval(() => { if (ws && ws.readyState === 1) ws.send(JSON.stringify({ t: "ping", at: Date.now() })); }, 15000);
+})();
+</script>
+</body>
+</html>
