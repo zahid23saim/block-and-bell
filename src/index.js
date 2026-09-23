@@ -324,11 +324,10 @@ export class Room {
 
     const me = state.boxes[idx];
     const who = me.player || me.name;
-    const t = sh.trains.find((x) => x.id === msg.args.trainId);
-    const sec = sh.sections[0];
 
     const line = applyAction(sh, idx, msg.action, msg.args, who);
     if (line) this.note(state, line);
+    else return this.toast(ws, "That road will not take it. Ask your neighbour why.");
 
     if (shiftOver(sh)) {
       state.phase = "REPORT";

@@ -141,6 +141,12 @@ h1{font-family:var(--mono);font-weight:600;letter-spacing:.06em;font-size:30px;m
   font-family:var(--mono);font-size:13px}
 .notice .grade{font-family:var(--slab);font-size:40px;line-height:1;font-weight:600}
 .notice .verdict{font-family:var(--slab);font-size:15px;margin-top:6px}
+.notice .held{margin-top:16px;border-top:1px solid #d5c9ae;padding-top:12px}
+.notice .held h4{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;
+  color:#9c2b22;margin:0 0 8px;font-weight:400}
+.notice .held li{font-family:var(--slab);font-size:14px;margin-bottom:6px;line-height:1.35}
+.notice .held ul{margin:0;padding-left:18px}
+.notice .held .who{font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;color:#6b6357}
 .notice blockquote{margin:16px 0 0;padding:10px 12px;background:#e2d6bc;
   font-family:var(--slab);font-size:14.5px;font-style:italic}
 .notice blockquote cite{display:block;font-style:normal;font-family:var(--mono);
@@ -220,7 +226,7 @@ h1{font-family:var(--mono);font-weight:600;letter-spacing:.06em;font-size:30px;m
       <span id="wire" class="wire-ok">● wire good</span>
     </div>
 
-    <div class="ribbon" id="ribbon"></div>
+    <div class="ribbon" id="ribbon" role="status" aria-live="polite" aria-atomic="true"></div>
 
     <div class="board">
       <div class="desks hidden" id="desks"></div>
@@ -229,10 +235,10 @@ h1{font-family:var(--mono);font-weight:600;letter-spacing:.06em;font-size:30px;m
         <span>▣ <b id="far-name">—</b></span>
         <span id="far-miles"></span>
       </div>
-      <div class="corridor" id="corridor"></div>
-      <div class="lamptext lamp-CLEAR" id="lamptext">▣ CLEAR</div>
+      <div class="corridor" id="corridor" role="img" aria-label="the section between the boxes"></div>
+      <div class="lamptext lamp-CLEAR" id="lamptext" role="status" aria-live="polite">▣ CLEAR</div>
       <div class="roadline" id="roadline"></div>
-      <div class="trains" id="trains"></div>
+      <div class="trains" id="trains" aria-label="workings standing at your box"></div>
     </div>
 
     <div class="tabs" role="tablist">
@@ -241,7 +247,7 @@ h1{font-family:var(--mono);font-weight:600;letter-spacing:.06em;font-size:30px;m
       <button role="tab" aria-selected="false" data-tab="wire">WIRE</button>
     </div>
 
-    <div class="sheet" id="sheet"></div>
+    <div class="sheet" id="sheet" aria-live="polite"></div>
 
     <div class="composer">
       <input id="say" placeholder="say something" maxlength="240" autocomplete="off">
@@ -404,6 +410,21 @@ function renderReport(s) {
   n.append(tot);
   n.append(el("div", "verdict", r.grade.line));
 
+  if (r.heldCount > 0) {
+    const h = el("div", "held");
+    h.append(el("h4", null,
+      `${r.heldCount} THING${r.heldCount === 1 ? "" : "S"} NOBODY EVER SAID OUT LOUD`));
+    const ul = el("ul");
+    for (const card of r.held.slice(0, 4)) {
+      const li = el("li", null, card.text);
+      li.append(el("div", "who", "held at " + (card.box || "")));
+      ul.append(li);
+    }
+    h.append(ul);
+    if (r.held.length > 4) h.append(el("div", "who", `and ${r.held.length - 4} more.`));
+    n.append(h);
+  }
+
   if (r.quote) {
     const q = el("blockquote", null, "“" + r.quote.text + "”");
     q.append(el("cite", null, `${r.quote.from}, ${r.quote.kind === "card" ? "reading from the book" : "on the wire"}`));
@@ -432,6 +453,7 @@ function renderBoard(s) {
     const c = $("#corridor"); c.textContent = "";
     for (let m = sec.miles; m >= 0; m--) {
       const row = el("div", "mile" + (m === 0 ? " here" : ""));
+      row.setAttribute("aria-hidden", "true");
       row.append(el("span", "n", String(m)));
       if (m === 0) row.append(el("span", null, "── YOUR BOX ──"));
       else if (m === Math.ceil(sec.miles / 2) && (sec.occupied || sec.occupiedBy))

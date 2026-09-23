@@ -395,9 +395,25 @@ export function buildReport(sh, register, boxNames) {
   const total = rows.reduce((a, r) => a + r.late, 0);
   const worst = rows.slice().sort((a, b) => b.late - a.late)[0];
 
-  // the last thing anybody actually said, before the worst train was dealt with
+  // the last thing anybody actually said
   const said = (register || []).filter((r) => r.kind === "say" || r.kind === "card");
   const quote = said.length ? said[said.length - 1] : null;
+
+  /**
+   * HELD FACTS — the closing beat.
+   *
+   * Every card that mattered, sat in somebody's book all night, and was never
+   * read out. The grade says whether the trains ran; this says whether you
+   * told each other, which is what the game is actually about. Decoys are
+   * excluded: holding those back was the correct thing to do.
+   */
+  const held = sh.facts
+    .filter((f) => f.trap !== "DECOY" && !f.posted && (f.knownFrom ?? 0) <= sh.clockMin)
+    .map((f) => ({
+      boxIdx: f.heldBy,
+      box: boxNames[f.heldBy] ?? sh.line.boxes[f.heldBy]?.name,
+      text: f.text ?? renderFact(f, sh),
+    }));
 
   return {
     line: sh.lineName,
@@ -408,6 +424,8 @@ export function buildReport(sh, register, boxNames) {
     total,
     grade: GRADE(total, rows.length),
     worst: worst && worst.late > 0 ? worst : null,
+    held,
+    heldCount: held.length,
     quote: quote ? { from: quote.from, text: quote.text, kind: quote.kind } : null,
     allAway: sh.trains.every((t) => t.state === "DONE"),
   };

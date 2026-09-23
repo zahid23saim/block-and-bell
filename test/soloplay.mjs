@@ -7,15 +7,22 @@ const PREF = ["GIVE","SEND_INTO_SECTION","TO_YARD","TO_LOOP","TO_PLATFORM","TO_S
 
 const { code } = await (await fetch(`${BASE}/api/create`, { method: "POST" })).json();
 console.log("room", code);
-let last = null;
-const sock = new WebSocket(`${WS}/api/ws?room=${code}`);
+let last = null, sock = null, token = null;
 const send = (o) => { try { sock.send(JSON.stringify(o)); } catch {} };
-sock.addEventListener("open", () => send({ t: "hello", v: 1 }));
-sock.addEventListener("message", (ev) => {
-  const m = JSON.parse(ev.data);
-  if (m.t === "hello_ack") send({ t: "claim_seat", boxId: "DUN", name: "Alone" });
-  else if (m.t === "snapshot") last = m;
-});
+function connect() {
+  sock = new WebSocket(`${WS}/api/ws?room=${code}`);
+  sock.addEventListener("open", () => send({ t: "hello", v: 1, resumeToken: token || undefined }));
+  sock.addEventListener("close", () => setTimeout(connect, 800));
+  sock.addEventListener("error", () => {});
+  sock.addEventListener("message", (ev) => {
+    const m = JSON.parse(ev.data);
+    if (m.t === "hello_ack") {
+      token = m.seatToken;
+      if (!m.boxId) send({ t: "claim_seat", boxId: "DUN", name: "Alone" });
+    } else if (m.t === "snapshot") last = m;
+  });
+}
+connect();
 await sleep(2000);
 
 const step = () => {
@@ -61,5 +68,5 @@ if (r) {
   console.log(`   all away: ${r.allAway}`);
   console.log("ROOM=" + code);
 } else console.log("NO REPORT — trains left:", (last?.trains||[]).map(t=>t.headcode+" "+t.name).join(", "));
-sock.close();
+try { sock.close(); } catch {}
 process.exit(r ? 0 : 1);
