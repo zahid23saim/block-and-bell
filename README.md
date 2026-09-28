@@ -1,8 +1,14 @@
 # BLOCK & BELL
 
+[![CI](https://github.com/zahid23saim/block-and-bell/actions/workflows/ci.yml/badge.svg)](https://github.com/zahid23saim/block-and-bell/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+![Cloudflare Workers + Durable Objects](https://img.shields.io/badge/Cloudflare%20Workers-Durable%20Objects-F38020?logo=cloudflare&logoColor=white)
+
 **One single track. Two signal boxes. You can only see your own — so say it out loud.**
 
 Play: **https://block-and-bell.zahid23saim.workers.dev**
+
+![Block & Bell on a phone: open a box, ask the neighbouring box for line clear, and the other signaller gives it](docs/preview.png)
 
 Two to four players work a single-track railway at night in 1897, each in their own
 signal box, from separate devices. Only one train may occupy the section between two
@@ -73,6 +79,9 @@ collapses the moment somebody opens devtools. A Durable Object holds the true ra
 sends each connection only its own view.
 
 ## Tests
+
+`npm test` runs the four offline suites (generator, shift, stall and planner), and
+[CI](.github/workflows/ci.yml) runs them on every push.
 
 ```bash
 node test/generator.mjs   # determinism, yield, invariants, achievability (600 lines)
