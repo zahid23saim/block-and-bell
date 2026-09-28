@@ -37,3 +37,4 @@ const mean = (x)=>(x.reduce((p,q)=>p+q,0)/(x.length||1)).toFixed(1);
 console.log(`monotonicity: ${n-violations}/${n} shifts where full knowledge was at least as good as none`);
 console.log(`knowledge is worth a mean of ${mean(gaps)} delay-minutes (max ${Math.max(...gaps)}, min ${Math.min(...gaps)})`);
 console.log(violations === 0 ? "NO VIOLATIONS — knowledge never hurt" : `${violations} VIOLATIONS`);
+process.exit(violations === 0 ? 0 : 1);
