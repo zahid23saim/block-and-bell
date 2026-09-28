@@ -1,0 +1,20 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    name: Offline test suite
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      # generator, shift, stall and planner run entirely offline. The live
+      # tests (solo, spectator, threebox, fullgame) play against the deployed
+      # worker and are run by hand.
+      - run: npm test
